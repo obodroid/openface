@@ -77,7 +77,7 @@ args = parser.parse_args()
 align = openface.AlignDlib(args.dlibFacePredictor)
 net = openface.TorchNeuralNet(args.networkModel, imgDim=args.imgDim,
                               cuda=args.cuda)
-
+lastRep = None
 
 class Face:
 
@@ -248,6 +248,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             self.svm = GridSearchCV(SVC(C=1), param_grid, cv=5).fit(X, y)
 
     def processFrame(self, dataURL, identity):
+
         head = "data:image/jpeg;base64,"
         assert(dataURL.startswith(head))
         imgdata = base64.b64decode(dataURL[len(head):])
@@ -281,13 +282,24 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                                       landmarkIndices=openface.AlignDlib.OUTER_EYES_AND_NOSE)
             if alignedFace is None:
                 continue
-
+            
             phash = str(imagehash.phash(Image.fromarray(alignedFace)))
+            print("phash = "+phash)
             if phash in self.images:
                 identity = self.images[phash].identity
             else:
                 rep = net.forward(alignedFace)
-                # print(rep)
+                # print("rep : {}".format(rep))
+                # print("identity : {}".format(identity))
+                global lastRep
+                if lastRep is None:
+                    print("First frame - Squared l2 distance 0")
+                else:
+                    d = rep - lastRep
+                    print("Squared l2 distance between representations: {:0.3f}".format(np.dot(d, d)))
+
+                lastRep = rep
+
                 if self.training:
                     self.images[phash] = Face(rep, identity)
                     # TODO: Transferring as a string is suboptimal.
