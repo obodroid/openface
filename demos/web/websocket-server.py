@@ -172,6 +172,10 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
     def getData(self):
         X = []
         y = []
+
+        if len(self.images) < 5:
+            return None
+
         for img in self.images.values():
             X.append(img.rep)
             y.append(img.identity)
@@ -232,6 +236,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
     def trainSVM(self):
         print("+ Training SVM on {} labeled images.".format(len(self.images)))
         d = self.getData()
+        print("data - {}".format(d))
         if d is None:
             self.svm = None
             return
@@ -310,11 +315,15 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                         d = rep - previousRep
                         drep = np.dot(d, d)
                         print("Squared l2 distance between representations: {:0.3f}".format(drep))
-                        dth = 0.2
+                        dth = 0.5
                         if drep < dth:
                             # assign previous id
                             print("assign previous id")
                             foundSimilarRep = True
+                            break
+                    else:
+                        continue  # executed if the loop ended normally (no break)
+                    break  # executed if 'continue' was skipped (break)
 
                 tmpReps[slideId].append(rep)
 
@@ -335,10 +344,12 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 # else:
                 if foundSimilarRep:
                     print("people => {}".format(self.people))
-                    if len(self.people) == 0:
+                    if (len(self.people) <= 1) & (self.svm is None) :
                         identity = 0
                         self.images[phash] = Face(rep, identity)
-                        self.people.append("User "+str(identity))
+                        name = "User "+str(identity)
+                        if name not in self.people:
+                            self.people.append(name)
                         content = [str(x) for x in alignedFace.flatten()]
                         msg = {
                             "type": "NEW_IMAGE",
@@ -350,6 +361,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                         self.sendMessage(json.dumps(msg))
                         self.trainSVM()
                     elif self.svm:
+                        print("has svm")
                         # prob = self.svm.predict_proba(rep)
                         predictions = self.svm.predict_proba(rep).ravel()
                         maxI = np.argmax(predictions)
@@ -373,7 +385,9 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                         else:
                             identity = len(self.people) #not sure if always index increment -> may need to use serialize label
                             self.images[phash] = Face(rep, identity)
-                            self.people.append("User "+str(identity))
+                            name = "User "+str(identity)
+                            if name not in self.people:
+                                self.people.append(name)
                             content = [str(x) for x in alignedFace.flatten()]
                             msg = {
                                 "type": "NEW_IMAGE",
@@ -397,6 +411,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             for p in openface.AlignDlib.OUTER_EYES_AND_NOSE:
                 cv2.circle(annotatedFrame, center=landmarks[p], radius=3,
                            color=(102, 204, 255), thickness=-1)
+            print("identity - {}".format(identity))
             if identity == -1:
                     name = "Unknown"
             else:
