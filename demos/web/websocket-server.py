@@ -78,6 +78,9 @@ align = openface.AlignDlib(args.dlibFacePredictor)
 net = openface.TorchNeuralNet(args.networkModel, imgDim=args.imgDim,
                               cuda=args.cuda)
 lastRep = None
+tmpReps = {}
+slideId = 0
+slideWindowSize = 5
 
 class Face:
 
@@ -245,7 +248,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                  'gamma': [0.001, 0.0001],
                  'kernel': ['rbf']}
             ]
-            self.svm = GridSearchCV(SVC(C=1), param_grid, cv=5).fit(X, y)
+            self.svm = GridSearchCV(SVC(C=1,probability=True,decision_function_shape='ovr'), param_grid, cv=5).fit(X, y)
 
     def processFrame(self, dataURL, identity):
 
@@ -270,10 +273,18 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         # if cv2.waitKey(1) & 0xFF == ord('q'):
         #     return
 
+        # global tmpReps
+        global slideId
+        if len(tmpReps) > slideWindowSize+1:
+            tmpReps.pop(slideId-slideWindowSize-1)
+
+        print("tmpReps.values() = {}".format(tmpReps.values()))
+        tmpReps[slideId] = []
         identities = []
         # bbs = align.getAllFaceBoundingBoxes(rgbFrame)
         bb = align.getLargestFaceBoundingBox(rgbFrame)
         bbs = [bb] if bb is not None else []
+
         for bb in bbs:
             # print(len(bbs))
             landmarks = align.findLandmarks(rgbFrame, bb)
@@ -285,66 +296,114 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             
             phash = str(imagehash.phash(Image.fromarray(alignedFace)))
             print("phash = "+phash)
+            
+            foundSimilarRep = False
+            identity = -1 #unknown
+            
             if phash in self.images:
                 identity = self.images[phash].identity
             else:
                 rep = net.forward(alignedFace)
-                # print("rep : {}".format(rep))
-                # print("identity : {}".format(identity))
-                global lastRep
-                if lastRep is None:
-                    print("First frame - Squared l2 distance 0")
-                else:
-                    d = rep - lastRep
-                    print("Squared l2 distance between representations: {:0.3f}".format(np.dot(d, d)))
+                
+                for previousReps in tmpReps.values():
+                    for previousRep in previousReps:
+                        d = rep - previousRep
+                        drep = np.dot(d, d)
+                        print("Squared l2 distance between representations: {:0.3f}".format(drep))
+                        dth = 0.2
+                        if drep < dth:
+                            # assign previous id
+                            print("assign previous id")
+                            foundSimilarRep = True
 
-                lastRep = rep
+                tmpReps[slideId].append(rep)
 
-                if self.training:
-                    self.images[phash] = Face(rep, identity)
-                    # TODO: Transferring as a string is suboptimal.
-                    # content = [str(x) for x in cv2.resize(alignedFace, (0,0),
-                    # fx=0.5, fy=0.5).flatten()]
-                    content = [str(x) for x in alignedFace.flatten()]
-                    msg = {
-                        "type": "NEW_IMAGE",
-                        "hash": phash,
-                        "content": content,
-                        "identity": identity,
-                        "representation": rep.tolist()
-                    }
-                    self.sendMessage(json.dumps(msg))
-                else:
+                # if self.training:
+                #     self.images[phash] = Face(rep, identity)
+                #     # TODO: Transferring as a string is suboptimal.
+                #     # content = [str(x) for x in cv2.resize(alignedFace, (0,0),
+                #     # fx=0.5, fy=0.5).flatten()]
+                #     content = [str(x) for x in alignedFace.flatten()]
+                #     msg = {
+                #         "type": "NEW_IMAGE",
+                #         "hash": phash,
+                #         "content": content,
+                #         "identity": identity,
+                #         "representation": rep.tolist()
+                #     }
+                #     self.sendMessage(json.dumps(msg))
+                # else:
+                if foundSimilarRep:
+                    print("people => {}".format(self.people))
                     if len(self.people) == 0:
-                        identity = -1
-                    elif len(self.people) == 1:
                         identity = 0
+                        self.images[phash] = Face(rep, identity)
+                        self.people.append("User "+str(identity))
+                        content = [str(x) for x in alignedFace.flatten()]
+                        msg = {
+                            "type": "NEW_IMAGE",
+                            "hash": phash,
+                            "content": content,
+                            "identity": identity,
+                            "representation": rep.tolist()
+                        }
+                        self.sendMessage(json.dumps(msg))
+                        self.trainSVM()
                     elif self.svm:
-                        identity = self.svm.predict(rep)[0]
-                    else:
-                        print("hhh")
-                        identity = -1
-                    if identity not in identities:
-                        identities.append(identity)
+                        # prob = self.svm.predict_proba(rep)
+                        predictions = self.svm.predict_proba(rep).ravel()
+                        maxI = np.argmax(predictions)
+                        confidence = predictions[maxI]
+                        if confidence > 0.8:
+                            identity = self.svm.predict(rep)[0]
+                            if confidence < 0.95: # no need to train if confidence more than 0.95
+                                self.images[phash] = Face(rep, identity)
+                                content = [str(x) for x in alignedFace.flatten()]
+                                msg = {
+                                    "type": "NEW_IMAGE",
+                                    "hash": phash,
+                                    "content": content,
+                                    "identity": identity,
+                                    "representation": rep.tolist()
+                                }
+                                self.sendMessage(json.dumps(msg))
+                                self.trainSVM()
+                            name = self.people[identity]
+                            print("{} has confidence - {}".format(name,confidence))
+                        else:
+                            identity = len(self.people) #not sure if always index increment -> may need to use serialize label
+                            self.images[phash] = Face(rep, identity)
+                            self.people.append("User "+str(identity))
+                            content = [str(x) for x in alignedFace.flatten()]
+                            msg = {
+                                "type": "NEW_IMAGE",
+                                "hash": phash,
+                                "content": content,
+                                "identity": identity,
+                                "representation": rep.tolist()
+                            }
+                            self.sendMessage(json.dumps(msg))
+                            self.trainSVM()
 
-            if not self.training:
-                bl = (bb.left(), bb.bottom())
-                tr = (bb.right(), bb.top())
-                cv2.rectangle(annotatedFrame, bl, tr, color=(153, 255, 204),
-                              thickness=3)
-                for p in openface.AlignDlib.OUTER_EYES_AND_NOSE:
-                    cv2.circle(annotatedFrame, center=landmarks[p], radius=3,
-                               color=(102, 204, 255), thickness=-1)
-                if identity == -1:
-                    if len(self.people) == 1:
-                        name = self.people[0]
-                    else:
-                        name = "Unknown"
-                else:
-                    name = self.people[identity]
-                cv2.putText(annotatedFrame, name, (bb.left(), bb.top() - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.75,
-                            color=(152, 255, 204), thickness=2)
+                if identity not in identities:
+                    identities.append(identity)
+
+            # if not self.training:
+            # always show annotate fram
+            bl = (bb.left(), bb.bottom())
+            tr = (bb.right(), bb.top())
+            cv2.rectangle(annotatedFrame, bl, tr, color=(153, 255, 204),
+                          thickness=3)
+            for p in openface.AlignDlib.OUTER_EYES_AND_NOSE:
+                cv2.circle(annotatedFrame, center=landmarks[p], radius=3,
+                           color=(102, 204, 255), thickness=-1)
+            if identity == -1:
+                    name = "Unknown"
+            else:
+                name = self.people[identity]
+            cv2.putText(annotatedFrame, name, (bb.left(), bb.top() - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.75,
+                        color=(152, 255, 204), thickness=2)
 
         if not self.training:
             msg = {
@@ -369,6 +428,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             }
             plt.close()
             self.sendMessage(json.dumps(msg))
+
+        slideId +=1
 
 
 def main(reactor):
