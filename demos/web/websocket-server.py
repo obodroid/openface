@@ -77,7 +77,7 @@ args = parser.parse_args()
 align = openface.AlignDlib(args.dlibFacePredictor)
 net = openface.TorchNeuralNet(args.networkModel, imgDim=args.imgDim,
                               cuda=args.cuda)
-lastRep = None
+firstPeopleRep = None
 tmpReps = {}
 slideId = 0
 slideWindowSize = 5
@@ -243,6 +243,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         else:
             (X, y) = d
             numIdentities = len(set(y + [-1]))
+            print("numIdentities = {}".format(numIdentities))
+
             if numIdentities <= 1:
                 return
 
@@ -278,7 +280,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         # if cv2.waitKey(1) & 0xFF == ord('q'):
         #     return
 
-        # global tmpReps
+        global firstPeopleRep
         global slideId
         if len(tmpReps) > slideWindowSize+1:
             tmpReps.pop(slideId-slideWindowSize-1)
@@ -345,7 +347,21 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 if foundSimilarRep:
                     print("people => {}".format(self.people))
                     if (len(self.people) <= 1) & (self.svm is None) :
-                        identity = 0
+                        if len(self.people)==0:
+                            identity = 0
+                            firstPeopleRep = rep
+                        else:
+                            d = rep - firstPeopleRep
+                            drep = np.dot(d, d)
+                            print("Squared l2 distance between firstPeopleRep: {:0.3f}".format(drep))
+                            dth = 0.5
+                            if drep > dth:
+                                # assign previous id
+                                print("assign new id")
+                                identity = 1
+                            else:
+                                identity = 0
+
                         self.images[phash] = Face(rep, identity)
                         name = "User "+str(identity)
                         if name not in self.people:
