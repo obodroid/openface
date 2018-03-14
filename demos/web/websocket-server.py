@@ -77,21 +77,26 @@ args = parser.parse_args()
 align = openface.AlignDlib(args.dlibFacePredictor)
 net = openface.TorchNeuralNet(args.networkModel, imgDim=args.imgDim,
                               cuda=args.cuda)
-firstPeopleRep = None
-tmpReps = {}
+
+unknowns = {}
 slideId = 0
 slideWindowSize = 5
+slideWindowFaces = {}
+
 
 class Face:
 
-    def __init__(self, rep, identity):
+    def __init__(self, rep, identity,phash=None,content=None):
         self.rep = rep
         self.identity = identity
+        self.phash = phash
+        self.content = content
 
     def __repr__(self):
-        return "{{id: {}, rep[0:5]: {}}}".format(
+        return "{{id: {}, rep[0:5]: {}, phash:{}}}".format(
             str(self.identity),
-            self.rep[0:5]
+            self.rep[0:5],
+            self.phash
         )
 
 
@@ -102,6 +107,9 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         self.training = True
         self.people = []
         self.svm = None
+        self.countUnknown = 0
+        self.firstPeopleRep = None
+
         if args.unknown:
             self.unknownImgs = np.load("./examples/web/unknown.npy")
 
@@ -257,6 +265,61 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             ]
             self.svm = GridSearchCV(SVC(C=1,probability=True,decision_function_shape='ovr'), param_grid, cv=5).fit(X, y)
 
+    def checkUnknown(self,rep,alignedFace,phash):
+
+        foundSimilarRep = False
+        for previousFaces in slideWindowFaces.values():
+            for previousFace in previousFaces:
+                d = rep - previousFace.rep
+                drep = np.dot(d, d)
+                print("Squared l2 distance between representations: {:0.3f}".format(drep))
+                dth = 0.5
+                if drep < dth:
+                    # assign previous id
+                    print("assign previous id")
+                    foundSimilarRep = True
+                    unknownIdentity = previousFace.identity
+                    break
+            else:
+                continue  # executed if the loop ended normally (no break)
+            break  # executed if 'continue' was skipped (break)
+
+        if not foundSimilarRep:
+            unknownIdentity = "Unknown_"+str(self.countUnknown)
+            self.countUnknown += 1 
+
+        content = [str(x) for x in alignedFace.flatten()]
+        face = Face(rep, unknownIdentity,phash,content)
+        unknowns.setdefault(unknownIdentity, []).append(face)
+        slideWindowFaces[slideId].append(face)
+        return unknownIdentity
+
+    def newIdentity(self,rep,unknownIdentity):
+        
+        identity = len(self.people)
+        if len(self.people)==0:
+            self.firstPeopleRep = rep
+        name = "User "+str(identity)
+        if name not in self.people:
+            self.people.append(name)
+
+        for identifyingFace in unknowns[unknownIdentity]:
+            self.images[identifyingFace.phash] = Face(identifyingFace.rep, identity)
+            msg = {
+                "type": "NEW_IMAGE",
+                "hash": identifyingFace.phash,
+                "content": identifyingFace.content,
+                "identity": identity,
+                "representation": identifyingFace.rep.tolist()
+            }
+            self.sendMessage(json.dumps(msg))
+        
+        # unknowns[new_key] = unknowns[unknownIdentity]
+        del unknowns[unknownIdentity]
+        self.trainSVM()
+        return identity
+
+
     def processFrame(self, dataURL, identity):
 
         head = "data:image/jpeg;base64,"
@@ -280,13 +343,12 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         # if cv2.waitKey(1) & 0xFF == ord('q'):
         #     return
 
-        global firstPeopleRep
         global slideId
-        if len(tmpReps) > slideWindowSize+1:
-            tmpReps.pop(slideId-slideWindowSize-1)
+        if len(slideWindowFaces) > slideWindowSize+1:
+            slideWindowFaces.pop(slideId-slideWindowSize-1)
 
-        print("tmpReps.values() = {}".format(tmpReps.values()))
-        tmpReps[slideId] = []
+        print("tmpReps.values() = {}".format(slideWindowFaces.values()))
+        slideWindowFaces[slideId] = []
         identities = []
         # bbs = align.getAllFaceBoundingBoxes(rgbFrame)
         bb = align.getLargestFaceBoundingBox(rgbFrame)
@@ -304,68 +366,38 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             phash = str(imagehash.phash(Image.fromarray(alignedFace)))
             print("phash = "+phash)
             
-            foundSimilarRep = False
             identity = -1 #unknown
-            
+            unknownIdentity = 0
+            rep = net.forward(alignedFace)
+
             if phash in self.images:
                 identity = self.images[phash].identity
-            else:
-                rep = net.forward(alignedFace)
-                
-                for previousReps in tmpReps.values():
-                    for previousRep in previousReps:
-                        d = rep - previousRep
-                        drep = np.dot(d, d)
-                        print("Squared l2 distance between representations: {:0.3f}".format(drep))
-                        dth = 0.5
-                        if drep < dth:
-                            # assign previous id
-                            print("assign previous id")
-                            foundSimilarRep = True
-                            break
-                    else:
-                        continue  # executed if the loop ended normally (no break)
-                    break  # executed if 'continue' was skipped (break)
-
-                tmpReps[slideId].append(rep)
-
-                # if self.training:
-                #     self.images[phash] = Face(rep, identity)
-                #     # TODO: Transferring as a string is suboptimal.
-                #     # content = [str(x) for x in cv2.resize(alignedFace, (0,0),
-                #     # fx=0.5, fy=0.5).flatten()]
-                #     content = [str(x) for x in alignedFace.flatten()]
-                #     msg = {
-                #         "type": "NEW_IMAGE",
-                #         "hash": phash,
-                #         "content": content,
-                #         "identity": identity,
-                #         "representation": rep.tolist()
-                #     }
-                #     self.sendMessage(json.dumps(msg))
-                # else:
-                if foundSimilarRep:
-                    print("people => {}".format(self.people))
-                    if (len(self.people) <= 1) & (self.svm is None) :
-                        if len(self.people)==0:
-                            identity = 0
-                            firstPeopleRep = rep
-                        else:
-                            d = rep - firstPeopleRep
-                            drep = np.dot(d, d)
-                            print("Squared l2 distance between firstPeopleRep: {:0.3f}".format(drep))
-                            dth = 0.5
-                            if drep > dth:
-                                # assign previous id
-                                print("assign new id")
-                                identity = 1
-                            else:
-                                identity = 0
-
+            elif len(self.people)==1:
+                foundSimilarRep = False
+                d = rep - self.firstPeopleRep
+                drep = np.dot(d, d)
+                print("Squared l2 distance between representations: {:0.3f}".format(drep))
+                dth = 0.5
+                if drep < dth:
+                    # assign previous id
+                    print("assign first id")
+                    foundSimilarRep = True
+                    identity = 0
+                else:
+                    # unknown check flow
+                    unknownIdentity = self.checkUnknown(rep,alignedFace,phash)
+                    if len(unknowns[unknownIdentity]) >= 5:
+                        identity = self.newIdentity(rep,unknownIdentity)
+            elif self.svm:
+                print("has svm")
+                # prob = self.svm.predict_proba(rep)
+                predictions = self.svm.predict_proba(rep).ravel()
+                maxI = np.argmax(predictions)
+                confidence = predictions[maxI]
+                if confidence > 0.8:
+                    identity = self.svm.predict(rep)[0]
+                    if confidence < 0.95: # no need to train if confidence more than 0.95
                         self.images[phash] = Face(rep, identity)
-                        name = "User "+str(identity)
-                        if name not in self.people:
-                            self.people.append(name)
                         content = [str(x) for x in alignedFace.flatten()]
                         msg = {
                             "type": "NEW_IMAGE",
@@ -376,47 +408,19 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                         }
                         self.sendMessage(json.dumps(msg))
                         self.trainSVM()
-                    elif self.svm:
-                        print("has svm")
-                        # prob = self.svm.predict_proba(rep)
-                        predictions = self.svm.predict_proba(rep).ravel()
-                        maxI = np.argmax(predictions)
-                        confidence = predictions[maxI]
-                        if confidence > 0.8:
-                            identity = self.svm.predict(rep)[0]
-                            if confidence < 0.95: # no need to train if confidence more than 0.95
-                                self.images[phash] = Face(rep, identity)
-                                content = [str(x) for x in alignedFace.flatten()]
-                                msg = {
-                                    "type": "NEW_IMAGE",
-                                    "hash": phash,
-                                    "content": content,
-                                    "identity": identity,
-                                    "representation": rep.tolist()
-                                }
-                                self.sendMessage(json.dumps(msg))
-                                self.trainSVM()
-                            name = self.people[identity]
-                            print("{} has confidence - {}".format(name,confidence))
-                        else:
-                            identity = len(self.people) #not sure if always index increment -> may need to use serialize label
-                            self.images[phash] = Face(rep, identity)
-                            name = "User "+str(identity)
-                            if name not in self.people:
-                                self.people.append(name)
-                            content = [str(x) for x in alignedFace.flatten()]
-                            msg = {
-                                "type": "NEW_IMAGE",
-                                "hash": phash,
-                                "content": content,
-                                "identity": identity,
-                                "representation": rep.tolist()
-                            }
-                            self.sendMessage(json.dumps(msg))
-                            self.trainSVM()
+                    name = self.people[identity]
+                    print("{} has confidence - {}".format(name,confidence))
+                else:
+                    unknownIdentity = self.checkUnknown(rep,alignedFace,phash)
+                    if len(unknowns[unknownIdentity]) >= 5:
+                        identity = self.newIdentity(rep,unknownIdentity)
+            else:
+                unknownIdentity = self.checkUnknown(rep,alignedFace,phash)
+                if len(unknowns[unknownIdentity]) >= 5:
+                    identity = self.newIdentity(rep,unknownIdentity)
 
-                if identity not in identities:
-                    identities.append(identity)
+            if identity not in identities:
+                identities.append(identity)
 
             # if not self.training:
             # always show annotate fram
@@ -429,9 +433,10 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                            color=(102, 204, 255), thickness=-1)
             print("identity - {}".format(identity))
             if identity == -1:
-                    name = "Unknown"
+                    name = unknownIdentity
             else:
                 name = self.people[identity]
+            print("name - {}".format(name))
             cv2.putText(annotatedFrame, name, (bb.left(), bb.top() - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.75,
                         color=(152, 255, 204), thickness=2)
