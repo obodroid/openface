@@ -39,11 +39,13 @@ import os
 import StringIO
 import urllib
 import base64
+import time
 
 from sklearn.decomposition import PCA
 from sklearn.grid_search import GridSearchCV
 from sklearn.manifold import TSNE
 from sklearn.svm import SVC
+from sklearn.ensemble import IsolationForest
 
 import matplotlib as mpl
 mpl.use('Agg')
@@ -78,7 +80,7 @@ align = openface.AlignDlib(args.dlibFacePredictor)
 net = openface.TorchNeuralNet(args.networkModel, imgDim=args.imgDim,
                               cuda=args.cuda)
 
-unknowns = {}
+
 slideId = 0
 slideWindowSize = 5
 slideWindowFaces = {}
@@ -93,10 +95,11 @@ class Face:
         self.content = content
 
     def __repr__(self):
-        return "{{id: {}, rep[0:5]: {}, phash:{}}}".format(
+        return "{{id: {}, rep[0:5]: {}, phash:{}, content:{}}}".format(
             str(self.identity),
             self.rep[0:5],
-            self.phash
+            self.phash,
+            self.content
         )
 
 
@@ -109,6 +112,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         self.svm = None
         self.countUnknown = 0
         self.firstPeopleRep = None
+        self.unknowns = {}
+        self.isoForest = None
 
         if args.unknown:
             self.unknownImgs = np.load("./examples/web/unknown.npy")
@@ -244,7 +249,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
     def trainSVM(self):
         print("+ Training SVM on {} labeled images.".format(len(self.images)))
         d = self.getData()
-        print("data - {}".format(d))
+        # print("data - {}".format(d))
         if d is None:
             self.svm = None
             return
@@ -264,6 +269,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                  'kernel': ['rbf']}
             ]
             self.svm = GridSearchCV(SVC(C=1,probability=True,decision_function_shape='ovr'), param_grid, cv=5).fit(X, y)
+            self.isoForest = IsolationForest(max_samples=100)
+            self.isoForest.fit(X,y)
 
     def checkUnknown(self,rep,alignedFace,phash):
 
@@ -290,7 +297,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
         content = [str(x) for x in alignedFace.flatten()]
         face = Face(rep, unknownIdentity,phash,content)
-        unknowns.setdefault(unknownIdentity, []).append(face)
+        self.unknowns.setdefault(unknownIdentity, []).append(face)
         slideWindowFaces[slideId].append(face)
         return unknownIdentity
 
@@ -303,8 +310,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         if name not in self.people:
             self.people.append(name)
 
-        for identifyingFace in unknowns[unknownIdentity]:
-            self.images[identifyingFace.phash] = Face(identifyingFace.rep, identity)
+        for identifyingFace in self.unknowns[unknownIdentity]:
+            self.images[identifyingFace.phash] = Face(identifyingFace.rep, identity,identifyingFace.phash,identifyingFace.content)
             msg = {
                 "type": "NEW_IMAGE",
                 "hash": identifyingFace.phash,
@@ -314,8 +321,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             }
             self.sendMessage(json.dumps(msg))
         
-        # unknowns[new_key] = unknowns[unknownIdentity]
-        del unknowns[unknownIdentity]
+        # self.unknowns[new_key] = self.unknowns[unknownIdentity]
+        del self.unknowns[unknownIdentity]
         self.trainSVM()
         return identity
 
@@ -347,7 +354,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         if len(slideWindowFaces) > slideWindowSize+1:
             slideWindowFaces.pop(slideId-slideWindowSize-1)
 
-        print("tmpReps.values() = {}".format(slideWindowFaces.values()))
+        # print("tmpReps.values() = {}".format(slideWindowFaces.values()))
         slideWindowFaces[slideId] = []
         identities = []
         # bbs = align.getAllFaceBoundingBoxes(rgbFrame)
@@ -383,22 +390,35 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     print("assign first id")
                     foundSimilarRep = True
                     identity = 0
+                    content = [str(x) for x in alignedFace.flatten()]
+                    self.images[phash] = Face(rep, identity,phash,content)
+                    msg = {
+                        "type": "NEW_IMAGE",
+                        "hash": phash,
+                        "content": content,
+                        "identity": identity,
+                        "representation": rep.tolist()
+                    }
+                    self.sendMessage(json.dumps(msg))
                 else:
                     # unknown check flow
                     unknownIdentity = self.checkUnknown(rep,alignedFace,phash)
-                    if len(unknowns[unknownIdentity]) >= 5:
+                    if len(self.unknowns[unknownIdentity]) >= 5:
                         identity = self.newIdentity(rep,unknownIdentity)
             elif self.svm:
                 print("has svm")
                 # prob = self.svm.predict_proba(rep)
-                predictions = self.svm.predict_proba(rep).ravel()
+                predictions = self.svm.predict_proba([rep]).ravel()
                 maxI = np.argmax(predictions)
                 confidence = predictions[maxI]
-                if confidence > 0.8:
-                    identity = self.svm.predict(rep)[0]
-                    if confidence < 0.95: # no need to train if confidence more than 0.95
-                        self.images[phash] = Face(rep, identity)
-                        content = [str(x) for x in alignedFace.flatten()]
+                inline = self.isoForest.predict([rep])
+                print("inline = {}, confidence = {}".format(inline,confidence))
+                if inline == 1:
+                    identity = self.svm.predict([rep])[0]
+                    content = [str(x) for x in alignedFace.flatten()]
+                    self.images[phash] = Face(rep, identity,phash,content)
+
+                    if confidence >0.85: # TODO: how should we train more                     
                         msg = {
                             "type": "NEW_IMAGE",
                             "hash": phash,
@@ -409,14 +429,13 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                         self.sendMessage(json.dumps(msg))
                         self.trainSVM()
                     name = self.people[identity]
-                    print("{} has confidence - {}".format(name,confidence))
                 else:
                     unknownIdentity = self.checkUnknown(rep,alignedFace,phash)
-                    if len(unknowns[unknownIdentity]) >= 5:
+                    if len(self.unknowns[unknownIdentity]) >= 5:
                         identity = self.newIdentity(rep,unknownIdentity)
             else:
                 unknownIdentity = self.checkUnknown(rep,alignedFace,phash)
-                if len(unknowns[unknownIdentity]) >= 5:
+                if len(self.unknowns[unknownIdentity]) >= 5:
                     identity = self.newIdentity(rep,unknownIdentity)
 
             if identity not in identities:
@@ -432,14 +451,32 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 cv2.circle(annotatedFrame, center=landmarks[p], radius=3,
                            color=(102, 204, 255), thickness=-1)
             print("identity - {}".format(identity))
+
+            currentFace = None
             if identity == -1:
-                    name = unknownIdentity
+                name = unknownIdentity
+                currentFace = self.unknowns[unknownIdentity][0]
             else:
+                currentFace = self.images[phash]
                 name = self.people[identity]
             print("name - {}".format(name))
+            # print("currentFace content {}".format(currentFace.content))
             cv2.putText(annotatedFrame, name, (bb.left(), bb.top() - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.75,
                         color=(152, 255, 204), thickness=2)
+
+            msg = {
+                "type": "SendToServer",
+                "hash": phash,
+                "content": currentFace.content,
+                "identity": identity,
+                "rep": currentFace.rep.tolist(),
+                "timestamp": time.time(),
+                "videoId": "0",
+                "robotId": "0",
+            }
+            # print(json.dumps(msg))
+
 
         if not self.training:
             msg = {
