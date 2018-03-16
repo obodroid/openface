@@ -29,17 +29,17 @@ from twisted.internet.ssl import DefaultOpenSSLContextFactory
 
 from twisted.python import log
 
+import httplib, urllib
 import argparse
 import cv2
 import imagehash
 import json
 from PIL import Image
 import numpy as np
-import os
 import StringIO
-import urllib
 import base64
 import time
+import ssl
 
 from sklearn.decomposition import PCA
 from sklearn.grid_search import GridSearchCV
@@ -73,13 +73,16 @@ parser.add_argument('--unknown', type=bool, default=False,
                     help='Try to predict unknown people')
 parser.add_argument('--port', type=int, default=9000,
                     help='WebSocket Port')
+# parser.add_argument('--apiURL', type=str,
+#                     help="Face Server API url.", default="192.168.1.243:8540")
+parser.add_argument('--apiURL', type=str,
+                    help="Face Server API url.", default="203.150.95.168:8540")
 
 args = parser.parse_args()
 
 align = openface.AlignDlib(args.dlibFacePredictor)
 net = openface.TorchNeuralNet(args.networkModel, imgDim=args.imgDim,
                               cuda=args.cuda)
-
 
 slideId = 0
 slideWindowSize = 5
@@ -114,6 +117,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         self.firstPeopleRep = None
         self.unknowns = {}
         self.isoForest = None
+
+        print("apiURL = "+args.apiURL)
 
         if args.unknown:
             self.unknownImgs = np.load("./examples/web/unknown.npy")
@@ -326,6 +331,14 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         self.trainSVM()
         return identity
 
+    def sendToAPI(self,msg):
+        url = args.apiURL
+        params = json.dumps(msg).encode('utf8')
+        headers = {"Content-type": "application/json"}
+        conn = httplib.HTTPSConnection(url,timeout=5, context=ssl._create_unverified_context())
+        conn.request("POST", "/faces", params,headers)
+        response = conn.getresponse()
+        print response.status, response.reason
 
     def processFrame(self, dataURL, identity):
 
@@ -465,17 +478,19 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                         cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.75,
                         color=(152, 255, 204), thickness=2)
 
+            #TODO need to change robot_id, video_id
             msg = {
                 "type": "SendToServer",
-                "hash": phash,
+                "robot_id":"1",
+                "video_id":"1",
+                "phash": phash,
                 "content": currentFace.content,
-                "identity": identity,
+                "face_id": identity,
                 "rep": currentFace.rep.tolist(),
-                "timestamp": time.time(),
-                "videoId": "0",
-                "robotId": "0",
+                "time": time.time()
             }
             # print(json.dumps(msg))
+            self.sendToAPI(msg)
 
 
         if not self.training:
