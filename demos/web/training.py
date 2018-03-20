@@ -22,7 +22,10 @@ import pprint
 
 # import pickle
 # import pymongo
+import pymongo
+from pymongo import MongoClient
 
+import pickle
 
 # from autobahn.twisted.websocket import WebSocketServerProtocol, \
 #     WebSocketServerFactory
@@ -37,17 +40,17 @@ import argparse
 # import imagehash
 # import json
 # from PIL import Image
-# import numpy as np
+import numpy as np
 # import StringIO
 # import base64
 # import time
 # import ssl
 
 # from sklearn.decomposition import PCA
-# from sklearn.grid_search import GridSearchCV
+from sklearn.grid_search import GridSearchCV
 # from sklearn.manifold import TSNE
-# from sklearn.svm import SVC
-# from sklearn.ensemble import IsolationForest
+from sklearn.svm import SVC
+from sklearn.ensemble import IsolationForest
 
 # import matplotlib as mpl
 # mpl.use('Agg')
@@ -89,9 +92,6 @@ args = parser.parse_args()
 # net = openface.TorchNeuralNet(args.networkModel, imgDim=args.imgDim,
 #                               cuda=args.cuda)
 
-import pymongo
-from pymongo import MongoClient
-
 class TrainingServer:
     def __init__(self):
         self.mongoURL = args.mongoURL
@@ -100,7 +100,7 @@ class TrainingServer:
         self.images = None
 
     def getFaces(self):
-        return list(self.db.faces.find().limit(6))
+        return list(self.db.faces.find())
         # for face in self.images:
         #     pprint.pprint(face)
 
@@ -172,24 +172,26 @@ class TrainingServer:
             return None
 
         for img in images:
-            print("img - {}".format(img.rep))
-            X.append(img.rep)
-            y.append(img.face_id)
+            # for key, value in img.iteritems():
+            #     print("key - {}, value - {}".format(key,value))
+            # pprint.pprint(img)
+            X.append(img['rep'])
+            y.append(int(img['face_id']))
 
         numIdentities = len(set(y + [-1])) - 1
         if numIdentities == 0:
             return None
 
-        if args.unknown:
-            numUnknown = y.count(-1)
-            numIdentified = len(y) - numUnknown
-            numUnknownAdd = (numIdentified / numIdentities) - numUnknown
-            if numUnknownAdd > 0:
-                print("+ Augmenting with {} unknown images.".format(numUnknownAdd))
-                for rep in self.unknownImgs[:numUnknownAdd]:
-                    # print(rep)
-                    X.append(rep)
-                    y.append(-1)
+        # if args.unknown:
+        #     numUnknown = y.count(-1)
+        #     numIdentified = len(y) - numUnknown
+        #     numUnknownAdd = (numIdentified / numIdentities) - numUnknown
+        #     if numUnknownAdd > 0:
+        #         print("+ Augmenting with {} unknown images.".format(numUnknownAdd))
+        #         for rep in self.unknownImgs[:numUnknownAdd]:
+        #             # print(rep)
+        #             X.append(rep)
+        #             y.append(-1)
 
         X = np.vstack(X)
         y = np.array(y)
