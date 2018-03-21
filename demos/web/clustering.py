@@ -16,6 +16,7 @@
 
 import os
 import sys
+import shutil
 import pprint
 fileDir = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(os.path.join(fileDir, "..", ".."))
@@ -86,8 +87,10 @@ parser.add_argument('--cuda', action='store_true')
 
 parser.add_argument('--mongoURL', type=str,
                     help="Mongo DB url.", default="192.168.1.243:27017")
+parser.add_argument('--sourceFolder', type=str,
+                    help="Source Folder", default="./tests/captured_images")
 parser.add_argument('--targetFolder', type=str,
-                    help="Target Folder", default="./tests/captured_images")
+                    help="Target Folder", default="./tests/cluster_images")
 
 args = parser.parse_args()
 
@@ -100,7 +103,9 @@ class ClusteringServer:
         # self.mongoURL = args.mongoURL
         # self.client = MongoClient("mongodb://"+self.mongoURL)
         # self.db = self.client.robot
+        self.sourceFolder = args.sourceFolder
         self.targetFolder = args.targetFolder
+
 
     def prepareData(self,path):
         self.X = []
@@ -148,20 +153,35 @@ class ClusteringServer:
                 self.Y.append(filename)
         
     def cluster(self):
-        db = DBSCAN(eps=0.3, min_samples=3).fit(self.X)
+        db = DBSCAN(eps=0.3, min_samples=2).fit(self.X)
         labels = db.labels_
         # Number of clusters in labels, ignoring noise if present.
         n_clusters_ = len(set(labels)) - (1 if -1 in labels else 0)
         print('Estimated number of clusters: %d' % n_clusters_)
+        for index, label in enumerate(labels):
+            filename = self.Y[index]
+            label = "User_" + str(label)
+            print("index - {}, label - {}, filename - {}".format(index,label,filename))
+
+            source = os.path.join(self.sourceFolder, filename)
+            # if not os.path.exists(self.targetFolder):
+            #     os.makedirs(self.targetFolder)
+
+            destination = os.path.join(self.targetFolder, label)
+            if not os.path.exists(destination):
+                os.makedirs(destination)
+            destination = os.path.join(destination, filename)
+            shutil.copyfile(source, destination)
 
         return None
 
 
 def main(reactor):
     clusteringServer = ClusteringServer()
-    print("Clustering people in folder : "+clusteringServer.targetFolder)
-    clusteringServer.prepareData(clusteringServer.targetFolder)
+    print("Clustering people in folder : "+clusteringServer.sourceFolder)
+    clusteringServer.prepareData(clusteringServer.sourceFolder)
     clusteringServer.cluster()
+
     
 
 if __name__ == '__main__':
