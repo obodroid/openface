@@ -1,6 +1,7 @@
 #!/usr/bin/env python2
 #
 # Copyright 2015-2016 Carnegie Mellon University
+# Edited 2018 Obodroid Corporation by Lertlove
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -130,7 +131,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             # self.getFacesFromAPI()
             self.people = self.getPreTrainedModel("db_people.json",{})
             self.preSvm = self.getPreTrainedModel("db_svm.pkl")
-
 
         self.svm = None
         self.countUnknown = 0

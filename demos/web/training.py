@@ -1,6 +1,6 @@
 #!/usr/bin/env python2
 #
-# Copyright 2015-2016 Carnegie Mellon University
+# Copyright 2018 Obodroid Corporation by Lertlove
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -257,8 +257,8 @@ class TrainingServer:
             self.svm = GridSearchCV(SVC(C=1,probability=True,decision_function_shape='ovr'), param_grid, cv=5).fit(X, y)
             self.isoForest = IsolationForest(max_samples=100)
             self.isoForest.fit(X,y)
-            svmPickle = joblib.dump(self.svm, 'face_svm.pkl')
-            isoForestPickle = joblib.dump(self.isoForest, 'face_isoForest.pkl')
+            svmPickle = joblib.dump(self.svm, 'db_svm.pkl')
+            # isoForestPickle = joblib.dump(self.isoForest, 'face_isoForest.pkl')
             # svmPickle = pickle.dump(self.svm, open( "face_svm.pkl", "wb"))
             # isoForestPickle = pickle.dump(self.isoForest, open( "face_isoForest.pkl", "wb"))
 
