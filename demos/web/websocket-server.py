@@ -21,6 +21,7 @@ sys.path.append(os.path.join(fileDir, "..", ".."))
 
 import pickle
 import pymongo
+import pprint
 import txaio
 txaio.use_twisted()
 
@@ -81,6 +82,8 @@ parser.add_argument('--apiURL', type=str,
                     help="Face Server API url.", default="192.168.1.243:8540")
 # parser.add_argument('--apiURL', type=str,
                     # help="Face Server API url.", default="203.150.95.168:8540")
+parser.add_argument('--workingMode', type=str,
+                    help="Working mode - db_master, on_server", default="on_server")
 
 args = parser.parse_args()
 
@@ -117,18 +120,21 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         super(OpenFaceServerProtocol, self).__init__()
         self.images = {}
         self.training = True
-        # self.people = ["Lert","Bee","Tutor"] #TODO retrive people from api
-        self.people = {}
+
+        if args.workingMode == "on_server":
+            self.people = self.getPreTrainedModel("working_people.json",{})
+            self.preSvm = self.getPreTrainedModel("working_svm.pkl")
+        else:
+            # self.getFacesFromAPI()
+            self.people = self.getPreTrainedModel("db_people.json",{})
+            self.preSvm = self.getPreTrainedModel("db_svm.pkl")
+
+
         self.svm = None
         self.countUnknown = 0
-        self.firstPeopleRep = None
+        self.firstPeopleRep = None if len(self.people) < 1 else self.people[0].rep
         self.unknowns = {}
-        self.isoForest = None
-
         print("apiURL = "+args.apiURL)
-        # self.getFacesFromAPI()
-        self.preSvm = self.getPreTrainedModel("face_svm.pkl")
-        self.preIsoForest = self.getPreTrainedModel("face_isoForest.pkl")
 
         if args.unknown:
             self.unknownImgs = np.load("./examples/web/unknown.npy")
@@ -261,11 +267,11 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         }
         self.sendMessage(json.dumps(msg))
 
-    def getPreTrainedModel(self,filename):
+    def getPreTrainedModel(self,filename,defaultValue=None):
         if os.path.isfile(filename):
             return joblib.load(filename)
         else:
-            return None
+            return defaultValue
 
     def trainSVM(self):
         print("+ Training SVM on {} labeled images.".format(len(self.images)))
@@ -290,8 +296,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                  'kernel': ['rbf']}
             ]
             self.svm = GridSearchCV(SVC(C=1,probability=True,decision_function_shape='ovr'), param_grid, cv=5).fit(X, y)
-            self.isoForest = IsolationForest(max_samples=100)
-            self.isoForest.fit(X,y)
+            # self.isoForest = IsolationForest(max_samples=100)
+            # self.isoForest.fit(X,y)
             # savePickle = pickle.dump(self.svm, open( "face_svm.pkl", "wb"))
 
     def checkUnknown(self,rep,alignedFace,phash):
@@ -328,7 +334,9 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         identity = len(self.people)
         if len(self.people)==0:
             self.firstPeopleRep = rep
+
         name = "User "+str(identity)
+
         if name not in self.people:
             newFace = Face(rep, identity,phash,content,name)
             self.people[identity] = newFace
@@ -353,7 +361,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 "content": identifyingFace.content,
                 "face_id": identity,
                 "rep": identifyingFace.rep.tolist(),
-                "time": time.time()
+                "time": time.time(),
+                "name": name
             }
             # print(json.dumps(msg))
             # self.sendToAPI(apiMsg)
@@ -361,6 +370,9 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         # self.unknowns[new_key] = self.unknowns[unknownIdentity]
         del self.unknowns[unknownIdentity]
         self.trainSVM()
+        # pickle.dump(self.people, open( "working_people.json", "wb"))
+        joblib.dump(self.people, 'working_people.json')
+        joblib.dump(self.svm, 'working_svm.pkl')
         return identity
 
     def sendToAPI(self,msg):
@@ -459,15 +471,25 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             if phash in self.images:
                 identity = self.images[phash].identity
             elif self.preSvm:
-                 # prob = self.svm.predict_proba(rep)
-                predictions = self.preSvm.predict_proba([rep]).ravel()
-                maxI = np.argmax(predictions)
-                confidence = predictions[maxI]
-                inline = self.preIsoForest.predict([rep])
-                print("pre-trained inline = {}, confidence = {}".format(inline,confidence))
-                if inline == 1:
-                    identity = self.preSvm.predict([rep])[0]
-                    name = self.people[identity].name
+                print("has pre-trained svm")
+                predictIdentity = self.preSvm.predict([rep])[0]
+                predictPeople = self.people[predictIdentity]
+                d = rep - predictPeople.rep
+                drep = np.dot(d, d)
+                print("distance of prediction: {:0.3f}".format(drep))
+                dth = 0.6
+                if drep < dth:
+                    identity = predictIdentity
+                
+                # prob = self.svm.predict_proba(rep)
+                # predictions = self.preSvm.predict_proba([rep]).ravel()
+                # maxI = np.argmax(predictions)
+                # confidence = predictions[maxI]
+                # inline = self.preIsoForest.predict([rep])
+                # print("pre-trained inline = {}, confidence = {}".format(inline,confidence))
+                # if inline == 1:
+                #     identity = self.preSvm.predict([rep])[0]
+                #     name = self.people[identity].name
             elif len(self.people)==1:
                 foundSimilarRep = False
                 d = rep - self.firstPeopleRep
@@ -497,30 +519,20 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             if (identity == -1) & (unknownIdentity == None):
                 if self.svm:
                     print("has svm")
-                    # prob = self.svm.predict_proba(rep)
-                    predictions = self.svm.predict_proba([rep]).ravel()
-                    maxI = np.argmax(predictions)
-                    confidence = predictions[maxI]
-                    inline = self.isoForest.predict([rep])
-                    print("inline = {}, confidence = {}".format(inline,confidence))
-                    if (inline == 1) & (confidence >0.85): # TODO: how should we train more                     
-                        identity = self.svm.predict([rep])[0]
-                        self.images[phash] = Face(rep, identity,phash,content)
-                        msg = {
-                            "type": "NEW_IMAGE",
-                            "hash": phash,
-                            "content": content,
-                            "identity": identity,
-                            "representation": rep.tolist()
-                        }
-                        self.sendMessage(json.dumps(msg))
-                        # self.trainSVM()
-                        name = self.people[identity].name
+                    predictIdentity = self.svm.predict([rep])[0]
+                    predictPeople = self.people[predictIdentity]
+                    d = rep - predictPeople.rep
+                    drep = np.dot(d, d)
+                    print("distance of prediction: {:0.3f}".format(drep))
+                    dth = 0.6
+                    if drep < dth:
+                        identity = predictIdentity
                     else:
                         unknownIdentity = self.checkUnknown(rep,alignedFace,phash)
                         if len(self.unknowns[unknownIdentity]) >= 5:
                             identity = self.newIdentity(rep,unknownIdentity,phash,content)
                 else:
+                    # unknown check flow
                     unknownIdentity = self.checkUnknown(rep,alignedFace,phash)
                     if len(self.unknowns[unknownIdentity]) >= 5:
                         identity = self.newIdentity(rep,unknownIdentity,phash,content)
