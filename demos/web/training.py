@@ -25,7 +25,8 @@ import pprint
 import pymongo
 from pymongo import MongoClient
 
-import pickle
+# import pickle
+from sklearn.externals import joblib
 
 # from autobahn.twisted.websocket import WebSocketServerProtocol, \
 #     WebSocketServerFactory
@@ -256,8 +257,10 @@ class TrainingServer:
             self.svm = GridSearchCV(SVC(C=1,probability=True,decision_function_shape='ovr'), param_grid, cv=5).fit(X, y)
             self.isoForest = IsolationForest(max_samples=100)
             self.isoForest.fit(X,y)
-            svmPickle = pickle.dump(self.svm, open( "face_svm.pkl", "wb"))
-            isoForestPickle = pickle.dump(self.isoForest, open( "face_isoForest.pkl", "wb"))
+            svmPickle = joblib.dump(self.svm, 'face_svm.pkl')
+            isoForestPickle = joblib.dump(self.isoForest, 'face_isoForest.pkl')
+            # svmPickle = pickle.dump(self.svm, open( "face_svm.pkl", "wb"))
+            # isoForestPickle = pickle.dump(self.isoForest, open( "face_isoForest.pkl", "wb"))
 
     # def checkUnknown(self,rep,alignedFace,phash):
 
