@@ -84,6 +84,8 @@ parser.add_argument('--apiURL', type=str,
                     # help="Face Server API url.", default="203.150.95.168:8540")
 parser.add_argument('--workingMode', type=str,
                     help="Working mode - db_master, on_server", default="on_server")
+parser.add_argument('--dth', type=str,
+                    help="Representation distance threshold", default=0.5)
 
 args = parser.parse_args()
 
@@ -308,8 +310,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 d = rep - previousFace.rep
                 drep = np.dot(d, d)
                 print("Squared l2 distance between representations: {:0.3f}".format(drep))
-                dth = 0.5
-                if drep < dth:
+                
+                if drep < args.dth:
                     # assign previous id
                     print("assign previous id")
                     foundSimilarRep = True
@@ -477,8 +479,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 d = rep - predictPeople.rep
                 drep = np.dot(d, d)
                 print("distance of prediction: {:0.3f}".format(drep))
-                dth = 0.6
-                if drep < dth:
+                
+                if drep < args.dth:
                     identity = predictIdentity
                 
                 # prob = self.svm.predict_proba(rep)
@@ -495,8 +497,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 d = rep - self.firstPeopleRep
                 drep = np.dot(d, d)
                 print("Squared l2 distance between representations: {:0.3f}".format(drep))
-                dth = 0.5
-                if drep < dth:
+                if drep < args.dth:
                     # assign previous id
                     print("assign first id")
                     foundSimilarRep = True
@@ -524,8 +525,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     d = rep - predictPeople.rep
                     drep = np.dot(d, d)
                     print("distance of prediction: {:0.3f}".format(drep))
-                    dth = 0.6
-                    if drep < dth:
+                    
+                    if drep < args.dth:
                         identity = predictIdentity
                     else:
                         unknownIdentity = self.checkUnknown(rep,alignedFace,phash)
