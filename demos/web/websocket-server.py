@@ -382,7 +382,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         params = json.dumps(msg).encode('utf8')
         headers = {"Content-type": "application/json"}
         conn = httplib.HTTPSConnection(url,timeout=5, context=ssl._create_unverified_context())
-        conn.request("POST", "/faces", params,headers)
+        conn.request("POST", "/face_images", params,headers)
         response = conn.getresponse()
         print response.status, response.reason
         conn.close()
@@ -390,7 +390,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
     def getFacesFromAPI(self):
         url = args.apiURL
         conn = httplib.HTTPSConnection(url,timeout=5, context=ssl._create_unverified_context())
-        conn.request("GET", "/faces?limit=10")
+        conn.request("GET", "/face_images?limit=10")
         response = conn.getresponse()
         print response.status, response.reason
         data = response.read()
