@@ -548,30 +548,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             if identity not in identities:
                 identities.append(identity)
 
-            # # always show annotate fram
-            # bl = (bb.left(), bb.bottom())
-            # tr = (bb.right(), bb.top())
-            # cv2.rectangle(annotatedFrame, bl, tr, color=(153, 255, 204),
-            #               thickness=3)
-            # for p in openface.AlignDlib.OUTER_EYES_AND_NOSE:
-            #     cv2.circle(annotatedFrame, center=landmarks[p], radius=3,
-            #                color=(102, 204, 255), thickness=-1)
-            # print("identity - {}".format(identity))
-
-            # # currentFace = None
-            # if identity == -1:
-            #     name = unknownIdentity
-            #     # currentFace = self.unknowns[unknownIdentity][0]
-            # else:
-            #     # currentFace = self.images[phash]
-            #     name = self.people[identity].name
-            # print("name - {}".format(name))
-            # # print("currentFace content {}".fofvrmat(currentFace.content))
-            # cv2.putText(annotatedFrame, name, (bb.left(), bb.top() - 10),
-            #             cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.75,
-            #             color=(152, 255, 204), thickness=2)
-
-
             print("identity - {}".format(identity))
 
             # currentFace = None
@@ -583,7 +559,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 name = self.people[identity].name
             print("name - {}".format(name))
 
-        # if not self.training:
             msg = {
                 "type": "IDENTITIES",
                 "identities": identities
@@ -607,9 +582,10 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             plt.close()
             # self.sendMessage(json.dumps(msg))
 
-            filename = name+'_'+str(slideId)+'.jpg'  # I assume you have a way of picking unique filenames
-            with open(filename, 'wb') as f:
-                f.write(imgdata.buf)
+            # if need save input file
+            # filename = name+'_'+str(slideId)+'.jpg'  # I assume you have a way of picking unique filenames
+            # with open(filename, 'wb') as f:
+            #     f.write(imgdata.buf)
 
         slideId +=1
 
