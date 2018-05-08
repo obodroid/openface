@@ -361,17 +361,18 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             self.sendMessage(json.dumps(msg))
 
             #TODO need to change robot_id, video_id
-            apiMsg = {
-                "type": "SendToServer",
+            aiMsg = {
+                "type": "FOUND_USER",
                 "robot_id":"1",
                 "video_id":"1",
                 "phash": identifyingFace.phash,
-                "content": identifyingFace.content,
+                # "content": identifyingFace.content,
                 "face_id": identity,
-                "rep": identifyingFace.rep.tolist(),
+                # "rep": identifyingFace.rep.tolist(),
                 "time": time.time(),
                 "name": name
             }
+            self.sendMessage(json.dumps(aiMsg))
             # print(json.dumps(msg))
             # self.sendToAPI(apiMsg)
         
@@ -557,6 +558,18 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             else:
                 # currentFace = self.images[phash]
                 name = self.people[identity].name
+                aiMsg = {
+                    "type": "FOUND_USER",
+                    "robot_id":"1",
+                    "video_id":"1",
+                    "phash": phash,
+                    # "content": content,
+                    "face_id": identity,
+                    # "rep": rep.tolist(),
+                    "time": time.time(),
+                    "name": name
+                }
+                self.sendMessage(json.dumps(aiMsg))
             print("name - {}".format(name))
 
             msg = {
