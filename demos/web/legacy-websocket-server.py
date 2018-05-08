@@ -436,14 +436,13 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         img = Image.open(imgF)
 
         buf = np.fliplr(np.asarray(img))
-        # print("height: {:0.3f}, width: {:0.3f}".format(img.height,img.width))
-        rgbFrame = np.zeros((img.height, img.width, 3), dtype=np.uint8)
+        rgbFrame = np.zeros((480, 640, 3), dtype=np.uint8)
         rgbFrame[:, :, 0] = buf[:, :, 2]
         rgbFrame[:, :, 1] = buf[:, :, 1]
         rgbFrame[:, :, 2] = buf[:, :, 0]
 
-        # if not self.training:
-        annotatedFrame = np.copy(buf)
+        if not self.training:
+            annotatedFrame = np.copy(buf)
 
         # cv2.imshow('frame', rgbFrame)
         # if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -548,30 +547,15 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             if identity not in identities:
                 identities.append(identity)
 
-            # # always show annotate fram
-            # bl = (bb.left(), bb.bottom())
-            # tr = (bb.right(), bb.top())
-            # cv2.rectangle(annotatedFrame, bl, tr, color=(153, 255, 204),
-            #               thickness=3)
-            # for p in openface.AlignDlib.OUTER_EYES_AND_NOSE:
-            #     cv2.circle(annotatedFrame, center=landmarks[p], radius=3,
-            #                color=(102, 204, 255), thickness=-1)
-            # print("identity - {}".format(identity))
-
-            # # currentFace = None
-            # if identity == -1:
-            #     name = unknownIdentity
-            #     # currentFace = self.unknowns[unknownIdentity][0]
-            # else:
-            #     # currentFace = self.images[phash]
-            #     name = self.people[identity].name
-            # print("name - {}".format(name))
-            # # print("currentFace content {}".fofvrmat(currentFace.content))
-            # cv2.putText(annotatedFrame, name, (bb.left(), bb.top() - 10),
-            #             cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.75,
-            #             color=(152, 255, 204), thickness=2)
-
-
+            # if not self.training:
+            # always show annotate fram
+            bl = (bb.left(), bb.bottom())
+            tr = (bb.right(), bb.top())
+            cv2.rectangle(annotatedFrame, bl, tr, color=(153, 255, 204),
+                          thickness=3)
+            for p in openface.AlignDlib.OUTER_EYES_AND_NOSE:
+                cv2.circle(annotatedFrame, center=landmarks[p], radius=3,
+                           color=(102, 204, 255), thickness=-1)
             print("identity - {}".format(identity))
 
             # currentFace = None
@@ -582,8 +566,13 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 # currentFace = self.images[phash]
                 name = self.people[identity].name
             print("name - {}".format(name))
+            # print("currentFace content {}".format(currentFace.content))
+            cv2.putText(annotatedFrame, name, (bb.left(), bb.top() - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.75,
+                        color=(152, 255, 204), thickness=2)
 
-        # if not self.training:
+
+        if not self.training:
             msg = {
                 "type": "IDENTITIES",
                 "identities": identities
@@ -605,11 +594,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 "content": content
             }
             plt.close()
-            # self.sendMessage(json.dumps(msg))
-
-            filename = name+'_'+str(slideId)+'.jpg'  # I assume you have a way of picking unique filenames
-            with open(filename, 'wb') as f:
-                f.write(imgdata.buf)
+            self.sendMessage(json.dumps(msg))
 
         slideId +=1
 
