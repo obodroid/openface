@@ -363,12 +363,12 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             #TODO need to change robot_id, video_id
             aiMsg = {
                 "type": "FOUND_USER",
-                "robot_id":"1",
-                "video_id":"1",
+                "robotId":"1",
+                "videoId":"1",
                 "phash": identifyingFace.phash,
-                # "content": identifyingFace.content,
-                "face_id": identity,
-                # "rep": identifyingFace.rep.tolist(),
+                "content": identifyingFace.content,
+                "predict_face_id": identity,
+                "rep": identifyingFace.rep.tolist(),
                 "time": time.time(),
                 "name": name
             }
@@ -560,12 +560,12 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 name = self.people[identity].name
                 aiMsg = {
                     "type": "FOUND_USER",
-                    "robot_id":"1",
-                    "video_id":"1",
+                    "robotId":"1",
+                    "videoId":"1",
                     "phash": phash,
-                    # "content": content,
+                    "content": content,
                     "face_id": identity,
-                    # "rep": rep.tolist(),
+                    "rep": rep.tolist(),
                     "time": time.time(),
                     "name": name
                 }
