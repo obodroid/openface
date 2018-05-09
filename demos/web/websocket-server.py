@@ -564,7 +564,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     "videoId":"1",
                     "phash": phash,
                     "content": content,
-                    "face_id": identity,
+                    "predict_face_id": identity,
                     "rep": rep.tolist(),
                     "time": time.time(),
                     "name": name
