@@ -98,7 +98,6 @@ slideId = 0
 slideWindowSize = 5
 slideWindowFaces = {}
 
-
 class Face:
 
     def __init__(self, rep, identity,phash=None,content=None,name=None):
@@ -158,7 +157,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         elif msg['type'] == "NULL":
             self.sendMessage('{"type": "NULL"}')
         elif msg['type'] == "FRAME":
-            self.processFrame(msg['dataURL'], msg['identity'])
+            self.processFrame(msg)
             self.sendMessage('{"type": "PROCESSED"}')
         elif msg['type'] == "TRAINING":
             self.training = msg['val']
@@ -308,7 +307,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             # self.isoForest.fit(X,y)
             # savePickle = pickle.dump(self.svm, open( "face_svm.pkl", "wb"))
 
-    def checkUnknown(self,rep,alignedFace,phash):
+    def checkUnknown(self,rep,alignedFace,phash,robotId,videoId):
 
         foundSimilarRep = False
         for previousFaces in slideWindowFaces.values():
@@ -333,6 +332,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
         content = [str(x) for x in alignedFace.flatten()]
         face = Face(rep, unknownIdentity,phash,content)
+        face.robotId = robotId
+        face.videoId = videoId
         self.unknowns.setdefault(unknownIdentity, []).append(face)
         slideWindowFaces[slideId].append(face)
         return unknownIdentity
@@ -363,8 +364,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             #TODO need to change robot_id, video_id
             aiMsg = {
                 "type": "FOUND_USER",
-                "robotId":"1",
-                "videoId":"1",
+                "robotId":identifyingFace.robotId,
+                "videoId":identifyingFace.videoId,
                 "phash": identifyingFace.phash,
                 "content": identifyingFace.content,
                 "predict_face_id": identity,
@@ -426,7 +427,19 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         print response.status, response.reason
         conn.close()
 
-    def processFrame(self, dataURL, identity):
+    def processFrame(self, msg):
+
+        dataURL= msg['dataURL']
+        identity = msg['identity']
+        if msg.has_key("robotId"):
+            robotId = msg['robotId'] 
+        else:
+            robotId = ""
+        
+        if msg.has_key("videoId"):
+            videoId = msg['videoId'] 
+        else:
+            videoId = ""
 
         head = "data:image/jpeg;base64,"
         assert(dataURL.startswith(head))
@@ -521,7 +534,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     self.sendMessage(json.dumps(msg))
                 else:
                     # unknown check flow
-                    unknownIdentity = self.checkUnknown(rep,alignedFace,phash)
+                    unknownIdentity = self.checkUnknown(rep,alignedFace,phash,robotId,videoId)
                     if len(self.unknowns[unknownIdentity]) >= 5:
                         identity = self.newIdentity(rep,unknownIdentity,phash,content)
             
@@ -537,12 +550,12 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     if drep < args.dth:
                         identity = predictIdentity
                     else:
-                        unknownIdentity = self.checkUnknown(rep,alignedFace,phash)
+                        unknownIdentity = self.checkUnknown(rep,alignedFace,phash,robotId,videoId)
                         if len(self.unknowns[unknownIdentity]) >= 5:
                             identity = self.newIdentity(rep,unknownIdentity,phash,content)
                 else:
                     # unknown check flow
-                    unknownIdentity = self.checkUnknown(rep,alignedFace,phash)
+                    unknownIdentity = self.checkUnknown(rep,alignedFace,phash,robotId,videoId)
                     if len(self.unknowns[unknownIdentity]) >= 5:
                         identity = self.newIdentity(rep,unknownIdentity,phash,content)
 
@@ -560,8 +573,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 name = self.people[identity].name
                 aiMsg = {
                     "type": "FOUND_USER",
-                    "robotId":"1",
-                    "videoId":"1",
+                    "robotId":robotId,
+                    "videoId":videoId,
                     "phash": phash,
                     "content": content,
                     "predict_face_id": identity,
