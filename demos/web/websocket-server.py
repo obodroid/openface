@@ -44,6 +44,7 @@ import StringIO
 import base64
 import time
 import ssl
+import scipy.misc
 
 from sklearn.decomposition import PCA
 from sklearn.grid_search import GridSearchCV
@@ -307,7 +308,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             # self.isoForest.fit(X,y)
             # savePickle = pickle.dump(self.svm, open( "face_svm.pkl", "wb"))
 
-    def checkUnknown(self,rep,alignedFace,phash,robotId,videoId):
+    def checkUnknown(self,rep,content,phash,robotId,videoId):
 
         foundSimilarRep = False
         for previousFaces in slideWindowFaces.values():
@@ -330,7 +331,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             unknownIdentity = "Unknown_"+str(self.countUnknown)
             self.countUnknown += 1 
 
-        content = [str(x) for x in alignedFace.flatten()]
+        # content = [str(x) for x in alignedFace.flatten()]
         face = Face(rep, unknownIdentity,phash,content)
         face.robotId = robotId
         face.videoId = videoId
@@ -449,7 +450,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         imgF.seek(0)
         img = Image.open(imgF)
 
-        buf = np.fliplr(np.asarray(img))
+        buf = np.fliplr(np.asarray(img)) 
         # print("height: {:0.3f}, width: {:0.3f}".format(img.height,img.width))
         rgbFrame = np.zeros((img.height, img.width, 3), dtype=np.uint8)
         rgbFrame[:, :, 0] = buf[:, :, 2]
@@ -476,72 +477,47 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
         for bb in bbs:
             # print(len(bbs))
-            landmarks = align.findLandmarks(rgbFrame, bb)
-            alignedFace = align.align(args.imgDim, rgbFrame, bb,
-                                      landmarks=landmarks,
-                                      landmarkIndices=openface.AlignDlib.OUTER_EYES_AND_NOSE)
-            if alignedFace is None:
-                continue
-            
-            phash = str(imagehash.phash(Image.fromarray(alignedFace)))
-            print("phash = "+phash)
-            
-            identity = -1 #unknown
-            unknownIdentity = None
-            rep = net.forward(alignedFace)
-            content = [str(x) for x in alignedFace.flatten()]
+            print("bb = {}".format(bb))
+            print("bb width = {}, height = {}".format(bb.width(),bb.height()))
 
-            if phash in self.images:
-                identity = self.images[phash].identity
-            elif self.preSvm:
-                print("has pre-trained svm")
-                predictIdentity = self.preSvm.predict([rep])[0]
-                predictPeople = self.people[predictIdentity]
-                d = rep - predictPeople.rep
-                drep = np.dot(d, d)
-                print("distance of prediction: {:0.3f}".format(drep))
+            cropImage = rgbFrame[bb.top():bb.bottom(), bb.left():bb.right()]
+            print("crop image : {}".format(len(cropImage)))
+            if (len(cropImage) > 0) & (bb.left() > 0) & (bb.right() > 0) & (bb.top() > 0) & (bb.bottom() > 0) :
+                cv2.imshow("cropped", cropImage)
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    return
+
+                landmarks = align.findLandmarks(rgbFrame, bb)
+                alignedFace = align.align(args.imgDim, rgbFrame, bb,
+                                        landmarks=landmarks,
+                                        landmarkIndices=openface.AlignDlib.OUTER_EYES_AND_NOSE)
+                if alignedFace is None:
+                    continue
                 
-                if drep < args.dth:
-                    identity = predictIdentity
+                phash = str(imagehash.phash(Image.fromarray(alignedFace)))
+                print("phash = "+phash)
                 
-                # prob = self.svm.predict_proba(rep)
-                # predictions = self.preSvm.predict_proba([rep]).ravel()
-                # maxI = np.argmax(predictions)
-                # confidence = predictions[maxI]
-                # inline = self.preIsoForest.predict([rep])
-                # print("pre-trained inline = {}, confidence = {}".format(inline,confidence))
-                # if inline == 1:
-                #     identity = self.preSvm.predict([rep])[0]
-                #     name = self.people[identity].name
-            elif len(self.people)==1:
-                foundSimilarRep = False
-                d = rep - self.firstPeopleRep
-                drep = np.dot(d, d)
-                print("Squared l2 distance between representations: {:0.3f}".format(drep))
-                if drep < args.dth:
-                    # assign previous id
-                    print("assign first id")
-                    foundSimilarRep = True
-                    identity = 0
-                    self.images[phash] = Face(rep, identity,phash,content)
-                    msg = {
-                        "type": "NEW_IMAGE",
-                        "hash": phash,
-                        "content": content,
-                        "identity": identity,
-                        "representation": rep.tolist()
-                    }
-                    self.sendMessage(json.dumps(msg))
-                else:
-                    # unknown check flow
-                    unknownIdentity = self.checkUnknown(rep,alignedFace,phash,robotId,videoId)
-                    if len(self.unknowns[unknownIdentity]) >= 5:
-                        identity = self.newIdentity(rep,unknownIdentity,phash,content)
-            
-            if (identity == -1) & (unknownIdentity == None):
-                if self.svm:
-                    print("has svm")
-                    predictIdentity = self.svm.predict([rep])[0]
+                identity = -1 #unknown
+                unknownIdentity = None
+                rep = net.forward(alignedFace)
+                # content = [str(x) for x in alignedFace.flatten()]
+
+                # content = [str(x) for x in cropImage.flatten()]
+                # base64.b64encode(cropImage)
+                # decode_img = cv2.imdecode(cropImage, cv2.CV_LOAD_IMAGE_COLOR)
+                cropImage = cropImage[:, :, ::-1].copy() # RGB to BGR for PIL image
+                cropPIL = scipy.misc.toimage(cropImage)
+                buf_crop = StringIO.StringIO()
+                cropPIL.save(buf_crop, format="PNG")
+                content = base64.b64encode(buf_crop.getvalue())
+                content= 'data:image/png;base64,' + content
+                print(content)
+
+                if phash in self.images:
+                    identity = self.images[phash].identity
+                elif self.preSvm:
+                    print("has pre-trained svm")
+                    predictIdentity = self.preSvm.predict([rep])[0]
                     predictPeople = self.people[predictIdentity]
                     d = rep - predictPeople.rep
                     drep = np.dot(d, d)
@@ -549,69 +525,123 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     
                     if drep < args.dth:
                         identity = predictIdentity
+                    
+                    # prob = self.svm.predict_proba(rep)
+                    # predictions = self.preSvm.predict_proba([rep]).ravel()
+                    # maxI = np.argmax(predictions)
+                    # confidence = predictions[maxI]
+                    # inline = self.preIsoForest.predict([rep])
+                    # print("pre-trained inline = {}, confidence = {}".format(inline,confidence))
+                    # if inline == 1:
+                    #     identity = self.preSvm.predict([rep])[0]
+                    #     name = self.people[identity].name
+                elif len(self.people)==1:
+                    foundSimilarRep = False
+                    d = rep - self.firstPeopleRep
+                    drep = np.dot(d, d)
+                    print("Squared l2 distance between representations: {:0.3f}".format(drep))
+                    if drep < args.dth:
+                        # assign previous id
+                        print("assign first id")
+                        foundSimilarRep = True
+                        identity = 0
+                        self.images[phash] = Face(rep, identity,phash,content)
+                        msg = {
+                            "type": "NEW_IMAGE",
+                            "hash": phash,
+                            "content": content,
+                            "identity": identity,
+                            "representation": rep.tolist()
+                        }
+                        self.sendMessage(json.dumps(msg))
                     else:
-                        unknownIdentity = self.checkUnknown(rep,alignedFace,phash,robotId,videoId)
+                        # unknown check flow
+                        unknownIdentity = self.checkUnknown(rep,content,phash,robotId,videoId)
                         if len(self.unknowns[unknownIdentity]) >= 5:
                             identity = self.newIdentity(rep,unknownIdentity,phash,content)
+                
+                if (identity == -1) & (unknownIdentity == None):
+                    if self.svm:
+                        print("has svm")
+                        predictIdentity = self.svm.predict([rep])[0]
+                        predictPeople = self.people[predictIdentity]
+                        d = rep - predictPeople.rep
+                        drep = np.dot(d, d)
+                        print("distance of prediction: {:0.3f}".format(drep))
+                        
+                        if drep < args.dth:
+                            identity = predictIdentity
+                        else:
+                            unknownIdentity = self.checkUnknown(rep,content,phash,robotId,videoId)
+                            if len(self.unknowns[unknownIdentity]) >= 5:
+                                identity = self.newIdentity(rep,unknownIdentity,phash,content)
+                    else:
+                        # unknown check flow
+                        unknownIdentity = self.checkUnknown(rep,content,phash,robotId,videoId)
+                        if len(self.unknowns[unknownIdentity]) >= 5:
+                            identity = self.newIdentity(rep,unknownIdentity,phash,content)
+
+                if identity not in identities:
+                    identities.append(identity)
+
+                print("identity - {}".format(identity))
+                # msg = {
+                #         "type": "NEW_IMAGE",
+                #         "hash": phash,
+                #         "content": content,
+                #         "identity": identity,
+                #         "representation": rep.tolist()
+                #     }
+                # self.sendMessage(json.dumps(msg))
+
+                # currentFace = None
+                if identity == -1:
+                    name = unknownIdentity
+                    # currentFace = self.unknowns[unknownIdentity][0]
                 else:
-                    # unknown check flow
-                    unknownIdentity = self.checkUnknown(rep,alignedFace,phash,robotId,videoId)
-                    if len(self.unknowns[unknownIdentity]) >= 5:
-                        identity = self.newIdentity(rep,unknownIdentity,phash,content)
+                    # currentFace = self.images[phash]
+                    name = self.people[identity].name
+                    aiMsg = {
+                        "type": "FOUND_USER",
+                        "robotId":robotId,
+                        "videoId":videoId,
+                        "phash": phash,
+                        "content": content,
+                        "predict_face_id": identity,
+                        "rep": rep.tolist(),
+                        "time": time.time(),
+                        "name": name
+                    }
+                    self.sendMessage(json.dumps(aiMsg))
+                print("name - {}".format(name))
 
-            if identity not in identities:
-                identities.append(identity)
-
-            print("identity - {}".format(identity))
-
-            # currentFace = None
-            if identity == -1:
-                name = unknownIdentity
-                # currentFace = self.unknowns[unknownIdentity][0]
-            else:
-                # currentFace = self.images[phash]
-                name = self.people[identity].name
-                aiMsg = {
-                    "type": "FOUND_USER",
-                    "robotId":robotId,
-                    "videoId":videoId,
-                    "phash": phash,
-                    "content": content,
-                    "predict_face_id": identity,
-                    "rep": rep.tolist(),
-                    "time": time.time(),
-                    "name": name
+                msg = {
+                    "type": "IDENTITIES",
+                    "identities": identities
                 }
-                self.sendMessage(json.dumps(aiMsg))
-            print("name - {}".format(name))
+                self.sendMessage(json.dumps(msg))
 
-            msg = {
-                "type": "IDENTITIES",
-                "identities": identities
-            }
-            self.sendMessage(json.dumps(msg))
+                plt.figure()
+                plt.imshow(annotatedFrame)
+                plt.xticks([])
+                plt.yticks([])
 
-            plt.figure()
-            plt.imshow(annotatedFrame)
-            plt.xticks([])
-            plt.yticks([])
+                imgdata = StringIO.StringIO()
+                plt.savefig(imgdata, format='png')
+                imgdata.seek(0)
+                content = 'data:image/png;base64,' + \
+                    urllib.quote(base64.b64encode(imgdata.buf))
+                msg = {
+                    "type": "ANNOTATED",
+                    "content": content
+                }
+                plt.close()
+                # self.sendMessage(json.dumps(msg))
 
-            imgdata = StringIO.StringIO()
-            plt.savefig(imgdata, format='png')
-            imgdata.seek(0)
-            content = 'data:image/png;base64,' + \
-                urllib.quote(base64.b64encode(imgdata.buf))
-            msg = {
-                "type": "ANNOTATED",
-                "content": content
-            }
-            plt.close()
-            # self.sendMessage(json.dumps(msg))
-
-            # if need save input file
-            # filename = name+'_'+str(slideId)+'.jpg'  # I assume you have a way of picking unique filenames
-            # with open(filename, 'wb') as f:
-            #     f.write(imgdata.buf)
+                # if need save input file
+                # filename = name+'_'+str(slideId)+'.jpg'
+                # with open(filename, 'wb') as f:
+                #     f.write(imgdata.buf)
 
         slideId +=1
 
