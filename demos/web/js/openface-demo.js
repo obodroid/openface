@@ -17,9 +17,9 @@ limitations under the License.
 navigator.getUserMedia = navigator.getUserMedia ||
     navigator.webkitGetUserMedia ||
     (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) ?
-        function(c, os, oe) {
-            navigator.mediaDevices.getUserMedia(c).then(os,oe);
-        } : null ||
+    function (c, os, oe) {
+        navigator.mediaDevices.getUserMedia(c).then(os, oe);
+    } : null ||
     navigator.msGetUserMedia;
 
 window.URL = window.URL ||
@@ -28,23 +28,21 @@ window.URL = window.URL ||
     window.mozURL;
 
 // http://stackoverflow.com/questions/6524288
-$.fn.pressEnter = function(fn) {
-
-    return this.each(function() {
+$.fn.pressEnter = function (fn) {
+    return this.each(function () {
         $(this).bind('enterPress', fn);
-        $(this).keyup(function(e){
-            if(e.keyCode == 13)
-            {
-              $(this).trigger("enterPress");
+        $(this).keyup(function (e) {
+            if (e.keyCode == 13) {
+                $(this).trigger('enterPress');
             }
-        })
+        });
     });
- };
+};
 
 function registerHbarsHelpers() {
     // http://stackoverflow.com/questions/8853396
-    Handlebars.registerHelper('ifEq', function(v1, v2, options) {
-        if(v1 === v2) {
+    Handlebars.registerHelper('ifEq', function (v1, v2, options) {
+        if (v1 === v2) {
             return options.fn(this);
         }
         return options.inverse(this);
@@ -58,29 +56,29 @@ function sendFrameLoop() {
     }
 
     if (tok > 0) {
-        var canvas = document.createElement('canvas');
+        const canvas = document.createElement('canvas');
         canvas.width = vid.width;
         canvas.height = vid.height;
-        var cc = canvas.getContext('2d');
+        const cc = canvas.getContext('2d');
         cc.drawImage(vid, 0, 0, vid.width, vid.height);
-        var apx = cc.getImageData(0, 0, vid.width, vid.height);
+        const apx = cc.getImageData(0, 0, vid.width, vid.height);
 
-        var dataURL = canvas.toDataURL('image/jpeg', 0.6)
+        const dataURL = canvas.toDataURL('image/jpeg', 0.6);
 
-        var msg = {
-            'type': 'FRAME',
-            'dataURL': dataURL,
-            'identity': defaultPerson
+        const msg = {
+            type: 'FRAME',
+            dataURL,
+            identity: defaultPerson,
         };
         socket.send(JSON.stringify(msg));
         tok--;
     }
-    setTimeout(function() {requestAnimFrame(sendFrameLoop)}, 250);
+    setTimeout(() => { requestAnimFrame(sendFrameLoop); }, 250);
 }
 
 
 function getPeopleInfoHtml() {
-    var info = {'-1': 0};
+    const info = { '-1': 0 };
     var len = people.length;
     for (var i = 0; i < len; i++) {
         info[i] = 0;
@@ -92,63 +90,62 @@ function getPeopleInfoHtml() {
         info[id] += 1;
     }
 
-    var h = "<li><b>Unknown:</b> "+info['-1']+"</li>";
+    let h = `<li><b>Unknown:</b> ${info['-1'] }</li>`;
     var len = people.length;
     for (var i = 0; i < len; i++) {
-        h += "<li><b>"+people[i]+":</b> "+info[i]+"</li>";
+        h += `<li><b>${ people[i] }:</b> ${ info[i]}</li>`;
     }
     return h;
 }
 
 function redrawPeople() {
-    var context = {people: people, images: images};
-    $("#peopleTable").html(peopleTableTmpl(context));
+    var context = { people, images };
+    $('#peopleTable').html(peopleTableTmpl(context));
 
-    var context = {people: people};
-    $("#defaultPersonDropdown").html(defaultPersonTmpl(context));
+    var context = { people };
+    $('#defaultPersonDropdown').html(defaultPersonTmpl(context));
 
-    $("#peopleInfo").html(getPeopleInfoHtml());
+    $('#peopleInfo').html(getPeopleInfoHtml());
 }
 
 function getDataURLFromRGB(rgb) {
-    var rgbLen = rgb.length;
+    const rgbLen = rgb.length;
 
-    var canvas = $('<canvas/>').width(96).height(96)[0];
-    var ctx = canvas.getContext("2d");
-    var imageData = ctx.createImageData(96, 96);
-    var data = imageData.data;
-    var dLen = data.length;
-    var i = 0, t = 0;
+    const canvas = $('<canvas/>').width(96).height(96)[0];
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.createImageData(96, 96);
+    const data = imageData.data;
+    const dLen = data.length;
+    let i = 0,
+        t = 0;
 
-    for (; i < dLen; i +=4) {
-        data[i] = rgb[t+2];
-        data[i+1] = rgb[t+1];
-        data[i+2] = rgb[t];
-        data[i+3] = 255;
+    for (; i < dLen; i += 4) {
+        data[i] = rgb[t + 2];
+        data[i + 1] = rgb[t + 1];
+        data[i + 2] = rgb[t];
+        data[i + 3] = 255;
         t += 3;
     }
     ctx.putImageData(imageData, 0, 0);
 
-    return canvas.toDataURL("image/png");
+    return canvas.toDataURL('image/png');
 }
 
 function updateRTT() {
-    var diffs = [];
-    for (var i = 5; i < defaultNumNulls; i++) {
+    const diffs = [];
+    for (let i = 5; i < defaultNumNulls; i++) {
         diffs.push(receivedTimes[i] - sentTimes[i]);
     }
-    $("#rtt-"+socketName).html(
-        jStat.mean(diffs).toFixed(2) + " ms (σ = " +
-            jStat.stdev(diffs).toFixed(2) + ")"
-    );
+    $(`#rtt-${socketName}`).html(`${jStat.mean(diffs).toFixed(2)} ms (σ = ${
+        jStat.stdev(diffs).toFixed(2)})`);
 }
 
 function sendState() {
-    var msg = {
-        'type': 'ALL_STATE',
-        'images': images,
-        'people': people,
-        'training': training
+    const msg = {
+        type: 'ALL_STATE',
+        images,
+        people,
+        training,
     };
     socket.send(JSON.stringify(msg));
 }
@@ -156,21 +153,21 @@ function sendState() {
 function createSocket(address, name) {
     socket = new WebSocket(address);
     socketName = name;
-    socket.binaryType = "arraybuffer";
-    socket.onopen = function() {
-        $("#serverStatus").html("Connected to " + name);
+    socket.binaryType = 'arraybuffer';
+    socket.onopen = function () {
+        $('#serverStatus').html(`Connected to ${name}`);
         sentTimes = [];
         receivedTimes = [];
         tok = defaultTok;
-        numNulls = 0
+        numNulls = 0;
 
-        socket.send(JSON.stringify({'type': 'NULL'}));
+        socket.send(JSON.stringify({ type: 'NULL' }));
         sentTimes.push(new Date());
-    }
-    socket.onmessage = function(e) {
+    };
+    socket.onmessage = function (e) {
         console.log(e);
-        j = JSON.parse(e.data)
-        if (j.type == "NULL") {
+        j = JSON.parse(e.data);
+        if (j.type == 'NULL') {
             receivedTimes.push(new Date());
             numNulls++;
             if (numNulls == defaultNumNulls) {
@@ -178,58 +175,56 @@ function createSocket(address, name) {
                 sendState();
                 sendFrameLoop();
             } else {
-                socket.send(JSON.stringify({'type': 'NULL'}));
+                socket.send(JSON.stringify({ type: 'NULL' }));
                 sentTimes.push(new Date());
             }
-        } else if (j.type == "PROCESSED") {
+        } else if (j.type == 'PROCESSED') {
             tok++;
-        } else if (j.type == "NEW_IMAGE") {
+        } else if (j.type == 'NEW_IMAGE') {
             images.push({
                 hash: j.hash,
                 identity: j.identity,
-                image: getDataURLFromRGB(j.content),
-                representation: j.representation
+                image: j.content,
+                representation: j.representation,
             });
             redrawPeople();
-        } else if (j.type == "IDENTITIES") {
-            var h = "Last updated: " + (new Date()).toTimeString();
-            h += "<ul>";
-            var len = j.identities.length
+        } else if (j.type == 'IDENTITIES') {
+            let h = `Last updated: ${(new Date()).toTimeString()}`;
+            h += '<ul>';
+            const len = j.identities.length;
             if (len > 0) {
-                for (var i = 0; i < len; i++) {
-                    var identity = "Unknown";
-                    var idIdx = j.identities[i];
+                for (let i = 0; i < len; i++) {
+                    let identity = 'Unknown';
+                    const idIdx = j.identities[i];
                     if (idIdx != -1) {
                         identity = people[idIdx];
                     }
-                    h += "<li>" + identity + "</li>";
+                    h += `<li>${identity}</li>`;
                 }
             } else {
-                h += "<li>Nobody detected.</li>";
+                h += '<li>Nobody detected.</li>';
             }
-            h += "</ul>"
-            $("#peopleInVideo").html(h);
-        } else if (j.type == "ANNOTATED") {
-            $("#detectedFaces").html(
-                "<img src='" + j['content'] + "' width='430px'></img>"
-            )
-        } else if (j.type == "TSNE_DATA") {
+            h += '</ul>';
+            $('#peopleInVideo').html(h);
+        } else if (j.type == 'ANNOTATED') {
+            $('#detectedFaces').html(`<img src='${j.content}' width='430px'></img>`);
+        } else if (j.type == 'TSNE_DATA') {
             BootstrapDialog.show({
-                message: "<img src='" + j['content'] + "' width='100%'></img>"
+                message: `<img src='${j.content}' width='100%'></img>`,
             });
         } else {
-            console.log("Unrecognized message type: " + j.type);
+            console.log(`Unrecognized message type: ${j.type}`);
         }
-    }
-    socket.onerror = function(e) {
-        console.log("Error creating WebSocket connection to " + address);
+    };
+    socket.onerror = function (e) {
+        console.log(`Error creating WebSocket connection to ${address}`);
         console.log(e);
-    }
-    socket.onclose = function(e) {
+    };
+    socket.onclose = function (e) {
         if (e.target == socket) {
-            $("#serverStatus").html("Disconnected.");
+            $('#serverStatus').html('Disconnected.');
         }
-    }
+    };
 }
 
 function umSuccess(stream) {
@@ -246,15 +241,15 @@ function umSuccess(stream) {
 
 function addPersonCallback(el) {
     defaultPerson = people.length;
-    var newPerson = $("#addPersonTxt").val();
-    if (newPerson == "") return;
+    const newPerson = $('#addPersonTxt').val();
+    if (newPerson == '') return;
     people.push(newPerson);
-    $("#addPersonTxt").val("");
+    $('#addPersonTxt').val('');
 
     if (socket != null) {
-        var msg = {
-            'type': 'ADD_PERSON',
-            'val': newPerson
+        const msg = {
+            type: 'ADD_PERSON',
+            val: newPerson,
         };
         socket.send(JSON.stringify(msg));
     }
@@ -262,16 +257,16 @@ function addPersonCallback(el) {
 }
 
 function trainingChkCallback() {
-    training = $("#trainingChk").prop('checked');
+    training = $('#trainingChk').prop('checked');
     if (training) {
-        makeTabActive("tab-preview");
+        makeTabActive('tab-preview');
     } else {
-        makeTabActive("tab-annotated");
+        makeTabActive('tab-annotated');
     }
     if (socket != null) {
-        var msg = {
-            'type': 'TRAINING',
-            'val': training
+        const msg = {
+            type: 'TRAINING',
+            val: training,
         };
         socket.send(JSON.stringify(msg));
     }
@@ -279,20 +274,20 @@ function trainingChkCallback() {
 
 function viewTSNECallback(el) {
     if (socket != null) {
-        var msg = {
-            'type': 'REQ_TSNE',
-            'people': people
+        const msg = {
+            type: 'REQ_TSNE',
+            people,
         };
         socket.send(JSON.stringify(msg));
     }
 }
 
 function findImageByHash(hash) {
-    var imgIdx = 0;
-    var len = images.length;
+    let imgIdx = 0;
+    const len = images.length;
     for (imgIdx = 0; imgIdx < len; imgIdx++) {
         if (images[imgIdx].hash == hash) {
-            console.log("  + Image found.");
+            console.log('  + Image found.');
             return imgIdx;
         }
     }
@@ -300,56 +295,56 @@ function findImageByHash(hash) {
 }
 
 function updateIdentity(hash, idx) {
-    var imgIdx = findImageByHash(hash);
+    const imgIdx = findImageByHash(hash);
     if (imgIdx >= 0) {
         images[imgIdx].identity = idx;
-        var msg = {
-            'type': 'UPDATE_IDENTITY',
-            'hash': hash,
-            'idx': idx
+        const msg = {
+            type: 'UPDATE_IDENTITY',
+            hash,
+            idx,
         };
         socket.send(JSON.stringify(msg));
     }
 }
 
 function removeImage(hash) {
-    console.log("Removing " + hash);
-    var imgIdx = findImageByHash(hash);
+    console.log(`Removing ${hash}`);
+    const imgIdx = findImageByHash(hash);
     if (imgIdx >= 0) {
         images.splice(imgIdx, 1);
         redrawPeople();
-        var msg = {
-            'type': 'REMOVE_IMAGE',
-            'hash': hash
+        const msg = {
+            type: 'REMOVE_IMAGE',
+            hash,
         };
         socket.send(JSON.stringify(msg));
     }
 }
 
 function changeServerCallback() {
-    $(this).addClass("active").siblings().removeClass("active");
+    $(this).addClass('active').siblings().removeClass('active');
     switch ($(this).html()) {
-    case "Local":
+    case 'Local':
         socket.close();
         redrawPeople();
-        createSocket("wss:" + window.location.hostname + ":9000", "Local");
+        createSocket(`wss:${window.location.hostname}:9000`, 'Local');
         break;
-    case "CMU":
+    case 'CMU':
         socket.close();
         redrawPeople();
-        createSocket("wss://facerec.cmusatyalab.org:9000", "CMU");
+        createSocket('wss://facerec.cmusatyalab.org:9000', 'CMU');
         break;
-    case "AWS East":
+    case 'AWS East':
         socket.close();
         redrawPeople();
-        createSocket("wss://54.159.128.49:9000", "AWS-East");
+        createSocket('wss://54.159.128.49:9000', 'AWS-East');
         break;
-    case "AWS West":
+    case 'AWS West':
         socket.close();
         redrawPeople();
-        createSocket("wss://54.188.234.61:9000", "AWS-West");
+        createSocket('wss://54.188.234.61:9000', 'AWS-West');
         break;
     default:
-        alert("Unrecognized server: " + $(this.html()));
+        alert(`Unrecognized server: ${$(this.html())}`);
     }
 }
