@@ -21,6 +21,9 @@ import pprint
 fileDir = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(os.path.join(fileDir, "..", ".."))
 
+from PIL import Image
+import cv2
+
 # import pickle
 # import pymongo
 import pymongo
@@ -126,34 +129,57 @@ class ClusteringServer:
             # imgF.write(imgdata)
             # imgF.seek(0)
             # img = Image.open(imgF)
-
+            baseFileName = os.path.splitext(os.path.basename(filename))[0]
+            imarr = np.asarray(img)
+            print("imarr = {}".format(imarr))
             buf = np.fliplr(np.asarray(img))
-            rgbFrame = np.zeros((300, 400, 3), dtype=np.uint8)
+            rgbFrame = np.zeros((img.height, img.width, 3), dtype=np.uint8)
             rgbFrame[:, :, 0] = buf[:, :, 2]
             rgbFrame[:, :, 1] = buf[:, :, 1]
             rgbFrame[:, :, 2] = buf[:, :, 0]
 
-            bb = align.getLargestFaceBoundingBox(rgbFrame)
-            bbs = [bb] if bb is not None else []
+            bbs = align.getAllFaceBoundingBoxes(rgbFrame)
+            # bb = align.getLargestFaceBoundingBox(rgbFrame)
+            # bbs = [bb] if bb is not None else []
+
+            faceInFile=0
 
             for bb in bbs:
                 # print(len(bbs))
-                landmarks = align.findLandmarks(rgbFrame, bb)
-                alignedFace = align.align(args.imgDim, rgbFrame, bb,
-                                          landmarks=landmarks,
-                                          landmarkIndices=openface.AlignDlib.OUTER_EYES_AND_NOSE)
-                if alignedFace is None:
-                    continue
-                
-                phash = str(imagehash.phash(Image.fromarray(alignedFace)))
-                print("phash = "+phash)
-                
-                rep = net.forward(alignedFace)
-                self.X.append(rep)
-                self.Y.append(filename)
+                faceInFile+=1
+                cropImage = rgbFrame[bb.top():bb.bottom(), bb.left():bb.right()]
+                print("crop image : {}".format(len(cropImage)))
+                if (len(cropImage) > 0) & (bb.left() > 0) & (bb.right() > 0) & (bb.top() > 0) & (bb.bottom() > 0) :
+                    cv2.imshow("cropped", cropImage)
+                    if cv2.waitKey(1) & 0xFF == ord('q'):
+                        return
+
+                    cropFolder = os.path.join(self.targetFolder, "crop")
+                    if not os.path.exists(cropFolder):
+                        os.makedirs(cropFolder)
+                    
+                    cropFile = baseFileName+"-"+str(faceInFile)+".jpg"
+                    cropPath = os.path.join(cropFolder, cropFile)
+
+                    im = Image.fromarray(cropImage)
+                    im.save(cropPath)
+
+                    landmarks = align.findLandmarks(rgbFrame, bb)
+                    alignedFace = align.align(args.imgDim, rgbFrame, bb,
+                                            landmarks=landmarks,
+                                            landmarkIndices=openface.AlignDlib.OUTER_EYES_AND_NOSE)
+                    if alignedFace is None:
+                        continue
+                    
+                    phash = str(imagehash.phash(Image.fromarray(alignedFace)))
+                    print("phash = "+phash)
+                    
+                    rep = net.forward(alignedFace)
+                    self.X.append(rep)
+                    self.Y.append(cropFile)
         
     def cluster(self):
-        db = DBSCAN(eps=0.3, min_samples=2).fit(self.X)
+        db = DBSCAN(eps=0.5, min_samples=3).fit(self.X)
         labels = db.labels_
         # Number of clusters in labels, ignoring noise if present.
         n_clusters_ = len(set(labels)) - (1 if -1 in labels else 0)
@@ -163,7 +189,8 @@ class ClusteringServer:
             label = "User_" + str(label)
             print("index - {}, label - {}, filename - {}".format(index,label,filename))
 
-            source = os.path.join(self.sourceFolder, filename)
+            source = os.path.join(self.targetFolder, "crop")
+            source = os.path.join(source, filename)
             # if not os.path.exists(self.targetFolder):
             #     os.makedirs(self.targetFolder)
 
