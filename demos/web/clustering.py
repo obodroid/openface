@@ -94,6 +94,10 @@ parser.add_argument('--sourceFolder', type=str,
                     help="Source Folder", default="./tests/captured_images")
 parser.add_argument('--targetFolder', type=str,
                     help="Target Folder", default="./tests/cluster_images")
+parser.add_argument('--mode', type=str,
+                    help="Function Mode", default="detect")
+parser.add_argument('--dth', type=float,
+                    help="Representation distance threshold", default=0.5)
 
 args = parser.parse_args()
 
@@ -116,27 +120,11 @@ class ClusteringServer:
         for filename in os.listdir(path):
             if not filename.endswith('.jpg'):
                 continue
-            # image = open(path+"/"+filename, 'rb') #open binary file in read mode
-            # image_read = image.read()
-            # imgdata = base64.encodestring(image_read)
             filepath = os.path.join(path, filename)
             img = Image.open(filepath)
-            # head = "data:image/jpeg;base64,"
-            # imgdata = base64.b64decode(dataURL[len(head):])
-            # print(imgdata)
 
-            # imgF = StringIO.StringIO()
-            # imgF.write(imgdata)
-            # imgF.seek(0)
-            # img = Image.open(imgF)
             baseFileName = os.path.splitext(os.path.basename(filename))[0]
-            imarr = np.asarray(img)
-            print("imarr = {}".format(imarr))
-            buf = np.fliplr(np.asarray(img))
-            rgbFrame = np.zeros((img.height, img.width, 3), dtype=np.uint8)
-            rgbFrame[:, :, 0] = buf[:, :, 2]
-            rgbFrame[:, :, 1] = buf[:, :, 1]
-            rgbFrame[:, :, 2] = buf[:, :, 0]
+            rgbFrame = self.convertImageToRgbFrame(img)
 
             bbs = align.getAllFaceBoundingBoxes(rgbFrame)
             # bb = align.getLargestFaceBoundingBox(rgbFrame)
@@ -179,7 +167,7 @@ class ClusteringServer:
                     self.Y.append(cropFile)
         
     def cluster(self):
-        db = DBSCAN(eps=0.5, min_samples=3).fit(self.X)
+        db = DBSCAN(eps=0.5, min_samples=2).fit(self.X)
         labels = db.labels_
         # Number of clusters in labels, ignoring noise if present.
         n_clusters_ = len(set(labels)) - (1 if -1 in labels else 0)
@@ -201,13 +189,72 @@ class ClusteringServer:
             shutil.copyfile(source, destination)
 
         return None
+    
+    def detect(self):
+        base = os.path.join(self.sourceFolder, "base")
+        foundCnt = 0
+        for filename in os.listdir(base):
+            if not filename.endswith('.jpg'):
+                continue
+            print("base filename = "+filename)
+            filepath = os.path.join(base, filename)
+            img = Image.open(filepath)
 
+            rgbFrame = self.convertImageToRgbFrame(img)
+            bb = align.getLargestFaceBoundingBox(rgbFrame)
+            landmarks = align.findLandmarks(rgbFrame, bb)
+            alignedFace = align.align(args.imgDim, rgbFrame, bb,
+                                    landmarks=landmarks,
+                                    landmarkIndices=openface.AlignDlib.OUTER_EYES_AND_NOSE)
+            if alignedFace is None:
+                continue
+            
+            phash = str(imagehash.phash(Image.fromarray(alignedFace)))
+            # print("phash = "+phash)
+            # print("self.Y = "+self.Y)
+            
+            baseRep = net.forward(alignedFace)
+            for index, cropFile in enumerate(self.Y):
+                cropFolder = os.path.join(self.targetFolder, "crop")
+                source = os.path.join(cropFolder, cropFile)
+                if os.path.exists(source):
+                    print("index = {}, cropFile = {}".format(index,cropFile))
+                    rep = self.X[index]
+                    d = baseRep - rep
+                    drep = np.dot(d, d)
+                    print("Squared l2 distance between representations: {:0.3f}".format(drep))
+                    
+                    # destination = os.path.join(self.targetFolder, "else")
+                    if drep < args.dth:
+                        print("found user")
+                        foundCnt = foundCnt+1
+                        destination = os.path.join(self.targetFolder, "found")
+
+                        if not os.path.exists(destination):
+                            os.makedirs(destination)
+                        destination = os.path.join(destination, cropFile)
+                        shutil.move(source, destination)
+        print("foundCnt - {}".format(foundCnt))
+            
+    def convertImageToRgbFrame(self,img):
+        imarr = np.asarray(img)
+        # print("imarr = {}".format(imarr))
+        buf = np.fliplr(np.asarray(img))
+        rgbFrame = np.zeros((img.height, img.width, 3), dtype=np.uint8)
+        rgbFrame[:, :, 0] = buf[:, :, 2]
+        rgbFrame[:, :, 1] = buf[:, :, 1]
+        rgbFrame[:, :, 2] = buf[:, :, 0]
+        return rgbFrame
 
 def main(reactor):
     clusteringServer = ClusteringServer()
     print("Clustering people in folder : "+clusteringServer.sourceFolder)
     clusteringServer.prepareData(clusteringServer.sourceFolder)
-    clusteringServer.cluster()
+
+    if args.mode == "cluster":
+        clusteringServer.cluster()
+    else:
+        clusteringServer.detect()
 
     
 
