@@ -27,6 +27,7 @@ import cv2
 import os
 import pickle
 import sys
+import shutil
 
 from operator import itemgetter
 
@@ -37,7 +38,8 @@ import pandas as pd
 import openface
 
 from sklearn.pipeline import Pipeline
-from sklearn.lda import LDA
+# from sklearn.lda import LDA
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 from sklearn.preprocessing import LabelEncoder
 from sklearn.svm import SVC
 from sklearn.grid_search import GridSearchCV
@@ -178,12 +180,21 @@ def infer(args, multiple=False):
         else:
                 (le, clf) = pickle.load(f, encoding='latin1')
 
+    count = 0
+    source = os.path.dirname(args.imgs[0])
+    print("source dir = {}".format(source))
     for img in args.imgs:
         print("\n=== {} ===".format(img))
-        reps = getRep(img, multiple)
+        try:
+            reps = getRep(img, multiple)
+        except:
+            continue
+
         if len(reps) > 1:
             print("List of faces in image from left to right")
+
         for r in reps:
+            count = count+1
             rep = r[1].reshape(1, -1)
             bbx = r[0]
             start = time.time()
@@ -191,16 +202,25 @@ def infer(args, multiple=False):
             maxI = np.argmax(predictions)
             person = le.inverse_transform(maxI)
             confidence = predictions[maxI]
+            name=person.decode('utf-8')
+
             if args.verbose:
                 print("Prediction took {} seconds.".format(time.time() - start))
             if multiple:
-                print("Predict {} @ x={} with {:.2f} confidence.".format(person.decode('utf-8'), bbx,
+                print("Predict {} @ x={} with {:.2f} confidence.".format(name, bbx,
                                                                          confidence))
             else:
-                print("Predict {} with {:.2f} confidence.".format(person.decode('utf-8'), confidence))
+                print("Predict {} with {:.2f} confidence.".format(name, confidence))
             if isinstance(clf, GMM):
                 dist = np.linalg.norm(rep - clf.means_[maxI])
                 print("  + Distance from the mean: {}".format(dist))
+            
+            classFolder = os.path.join(source, name)
+            filename = str(count) + "-"+str(confidence)
+            destination = os.path.join(classFolder, filename)
+            if not os.path.exists(classFolder):
+                os.makedirs(classFolder)
+            shutil.copyfile(img, destination)
 
 
 if __name__ == '__main__':

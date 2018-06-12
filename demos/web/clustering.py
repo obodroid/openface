@@ -121,7 +121,11 @@ class ClusteringServer:
             if not filename.endswith('.jpg'):
                 continue
             filepath = os.path.join(path, filename)
-            img = Image.open(filepath)
+            try:
+                img = Image.open(filepath)
+            except:
+                print("cannot open image file")
+                continue
 
             baseFileName = os.path.splitext(os.path.basename(filename))[0]
             rgbFrame = self.convertImageToRgbFrame(img)
@@ -250,7 +254,7 @@ def main(reactor):
     clusteringServer = ClusteringServer()
     print("Clustering people in folder : "+clusteringServer.sourceFolder)
     clusteringServer.prepareData(clusteringServer.sourceFolder)
-
+    
     if args.mode == "cluster":
         clusteringServer.cluster()
     else:
