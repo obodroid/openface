@@ -28,6 +28,9 @@ import os
 import pickle
 import sys
 import shutil
+import dill
+import json
+from face import Face
 
 from operator import itemgetter
 
@@ -46,12 +49,13 @@ from sklearn.grid_search import GridSearchCV
 from sklearn.mixture import GMM
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.naive_bayes import GaussianNB
+from sklearn.externals import joblib
 
 fileDir = os.path.dirname(os.path.realpath(__file__))
-modelDir = os.path.join(fileDir, '..', 'models')
+# modelDir = os.path.join(fileDir, '..', 'models')
+modelDir = os.path.join(fileDir, '..', '..', 'models')
 dlibModelDir = os.path.join(modelDir, 'dlib')
 openfaceModelDir = os.path.join(modelDir, 'openface')
-
 
 def getRep(imgPath, multiple=False):
     start = time.time()
@@ -106,13 +110,23 @@ def train(args):
     print("Loading embeddings.")
     fname = "{}/labels.csv".format(args.workDir)
     labels = pd.read_csv(fname, header=None).as_matrix()[:, 1]
+
+    images = {}
+    for label in labels:
+        dirname = os.path.split(os.path.dirname(label))[1]
+        print("dirname = {}".format(dirname))
+        images[dirname] = label
+    print("images = {}".format(images))
+
     labels = map(itemgetter(1),
                  map(os.path.split,
                      map(os.path.dirname, labels)))  # Get the directory.
+
     fname = "{}/reps.csv".format(args.workDir)
     embeddings = pd.read_csv(fname, header=None).as_matrix()
     le = LabelEncoder().fit(labels)
     labelsNum = le.transform(labels)
+    print("labelsNum = {}".format(labelsNum))
     nClasses = len(le.classes_)
     print("Training for {} classes.".format(nClasses))
 
@@ -172,6 +186,39 @@ def train(args):
     with open(fName, 'w') as f:
         pickle.dump((le, clf), f)
 
+    fName = "{}/working_svm.pkl".format(args.workDir)
+    print("Saving working_svm to '{}'".format(fName))
+    joblib.dump(clf, fName)
+
+    i = 0
+    people = {}
+    while i < nClasses:
+        person = le.inverse_transform(i)
+        print("person '{}'".format(person))
+        name=person.decode('utf-8')
+        print("name '{}'".format(name))
+        img = images[name]
+        print("img file '{}'".format(img))
+        # try:
+        r = getRep(img, False)[0]
+        # rep = r[1].reshape(1, -1)
+        rep = r[1]
+        newFace = Face(rep, i)
+        people[i] = newFace
+        # except:
+        #     print("no face found")
+        i += 1
+    
+    fName = "{}/working_people.json".format(args.workDir)
+    print("Saving working_people to '{}'".format(fName))
+    joblib.dump(people, fName)
+
+    # with open(fName, 'wb') as f:
+    #     json.dump(people, f)
+
+# def loadPeople(args):
+#     newFace = Face(rep, identity,phash,content,name)
+#     self.people[identity] = newFace
 
 def infer(args, multiple=False):
     with open(args.classifierModel, 'rb') as f:

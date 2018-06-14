@@ -33,6 +33,9 @@ from twisted.internet.ssl import DefaultOpenSSLContextFactory
 
 from twisted.python import log
 
+
+from face import Face
+
 import httplib, urllib
 import argparse
 import cv2
@@ -99,23 +102,22 @@ slideId = 0
 slideWindowSize = 5
 slideWindowFaces = {}
 
-class Face:
+# class Face:
+#     def __init__(self, rep, identity,phash=None,content=None,name=None):
+#         self.rep = rep
+#         self.identity = identity
+#         self.phash = phash
+#         self.content = content
+#         self.name = name
 
-    def __init__(self, rep, identity,phash=None,content=None,name=None):
-        self.rep = rep
-        self.identity = identity
-        self.phash = phash
-        self.content = content
-        self.name = name
-
-    def __repr__(self):
-        return "{{id: {}, rep[0:5]: {}, phash:{}, content:{}, name:{}}}".format(
-            str(self.identity),
-            self.rep[0:5],
-            self.phash,
-            self.content,
-            self.name
-        )
+#     def __repr__(self):
+#         return "{{id: {}, rep[0:5]: {}, phash:{}, content:{}, name:{}}}".format(
+#             str(self.identity),
+#             self.rep[0:5],
+#             self.phash,
+#             self.content,
+#             self.name
+#         )
 
 
 class OpenFaceServerProtocol(WebSocketServerProtocol):
@@ -377,11 +379,10 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             self.sendMessage(json.dumps(aiMsg))
             # print(json.dumps(msg))
             # self.sendToAPI(apiMsg)
-        
-        # self.unknowns[new_key] = self.unknowns[unknownIdentity]
+    
         del self.unknowns[unknownIdentity]
         self.trainSVM()
-        # pickle.dump(self.people, open( "working_people.json", "wb"))
+
         joblib.dump(self.people, 'working_people.json')
         joblib.dump(self.svm, 'working_svm.pkl')
         return identity
@@ -416,9 +417,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
         # return self.images
 
-    # def getFacesFromDB(self):
-
-
     def getPeopleFromAPI(self,msg):
         url = args.apiURL
         params = json.dumps(msg).encode('utf8')
@@ -452,6 +450,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
         buf = np.fliplr(np.asarray(img)) 
         # print("height: {:0.3f}, width: {:0.3f}".format(img.height,img.width))
+
         rgbFrame = np.zeros((img.height, img.width, 3), dtype=np.uint8)
         rgbFrame[:, :, 0] = buf[:, :, 2]
         rgbFrame[:, :, 1] = buf[:, :, 1]
@@ -465,8 +464,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         #     return
 
         global slideId
-        if len(slideWindowFaces) > slideWindowSize+1:
-            slideWindowFaces.pop(slideId-slideWindowSize-1)
+        # if len(slideWindowFaces) > slideWindowSize+1:
+        #     slideWindowFaces.pop(slideId-slideWindowSize-1)
 
         # print("tmpReps.values() = {}".format(slideWindowFaces.values()))
         slideWindowFaces[slideId] = []
@@ -511,7 +510,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 cropPIL.save(buf_crop, format="PNG")
                 content = base64.b64encode(buf_crop.getvalue())
                 content= 'data:image/png;base64,' + content
-                print(content)
 
                 if phash in self.images:
                     identity = self.images[phash].identity
@@ -526,6 +524,11 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     if drep < args.dth:
                         identity = predictIdentity
                     
+                    # print("msg - {}".format(msg))
+                    if msg.has_key("sourceFolder"):
+                        print("identity - {}, name - {}, drep - {}, imageFile - {}".format(identity,predictPeople,drep,msg["imageFile"]))
+                        return
+
                     # prob = self.svm.predict_proba(rep)
                     # predictions = self.preSvm.predict_proba([rep]).ravel()
                     # maxI = np.argmax(predictions)
@@ -644,7 +647,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 #     f.write(imgdata.buf)
 
         slideId +=1
-
 
 def main(reactor):
     log.startLogging(sys.stdout)
