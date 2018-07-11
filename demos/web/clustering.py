@@ -23,53 +23,26 @@ sys.path.append(os.path.join(fileDir, "..", ".."))
 
 from PIL import Image
 import cv2
-
-# import pickle
-# import pymongo
 import pymongo
 from pymongo import MongoClient
 
-# import pickle
 from sklearn.externals import joblib
 
-# from autobahn.twisted.websocket import WebSocketServerProtocol, \
-#     WebSocketServerFactory
-# from twisted.internet import task, defer
-# from twisted.internet.ssl import DefaultOpenSSLContextFactory
-
-# from twisted.python import log
-
-# import httplib, urllib
 import argparse
-# import cv2
 import imagehash
-# import json
 from PIL import Image
 import numpy as np
 import StringIO
 import base64
-# import time
-# import ssl
-
-# from sklearn.decomposition import PCA
 from sklearn.grid_search import GridSearchCV
-# from sklearn.manifold import TSNE
 from sklearn.svm import SVC
 from sklearn.cluster import DBSCAN
-
-# import matplotlib as mpl
-# mpl.use('Agg')
-# import matplotlib.pyplot as plt
-# import matplotlib.cm as cm
 
 import openface
 
 modelDir = os.path.join(fileDir, '..', '..', 'models')
 dlibModelDir = os.path.join(modelDir, 'dlib')
 openfaceModelDir = os.path.join(modelDir, 'openface')
-# # For TLS connections
-# tls_crt = os.path.join(fileDir, 'tls', 'server.crt')
-# tls_key = os.path.join(fileDir, 'tls', 'server.key')
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--dlibFacePredictor', type=str, help="Path to dlib's face predictor.",
@@ -79,14 +52,6 @@ parser.add_argument('--networkModel', type=str, help="Path to Torch network mode
 parser.add_argument('--imgDim', type=int,
                     help="Default image dimension.", default=96)
 parser.add_argument('--cuda', action='store_true')
-# parser.add_argument('--unknown', type=bool, default=False,
-#                     help='Try to predict unknown people')
-# parser.add_argument('--port', type=int, default=9000,
-#                     help='WebSocket Port')
-# parser.add_argument('--apiURL', type=str,
-#                     help="Face Server API url.", default="192.168.1.243:8540")
-# parser.add_argument('--mongoURL', type=str,
-#                     help="Mongo DB url.", default="203.150.95.168:8540")
 
 parser.add_argument('--mongoURL', type=str,
                     help="Mongo DB url.", default="192.168.1.243:27017")
@@ -107,12 +72,8 @@ net = openface.TorchNeuralNet(args.networkModel, imgDim=args.imgDim,
 
 class ClusteringServer:
     def __init__(self):
-        # self.mongoURL = args.mongoURL
-        # self.client = MongoClient("mongodb://"+self.mongoURL)
-        # self.db = self.client.robot
         self.sourceFolder = args.sourceFolder
         self.targetFolder = args.targetFolder
-
 
     def prepareData(self,path):
         self.X = []
@@ -131,13 +92,10 @@ class ClusteringServer:
             rgbFrame = self.convertImageToRgbFrame(img)
 
             bbs = align.getAllFaceBoundingBoxes(rgbFrame)
-            # bb = align.getLargestFaceBoundingBox(rgbFrame)
-            # bbs = [bb] if bb is not None else []
 
             faceInFile=0
 
             for bb in bbs:
-                # print(len(bbs))
                 faceInFile+=1
                 cropImage = rgbFrame[bb.top():bb.bottom(), bb.left():bb.right()]
                 print("crop image : {}".format(len(cropImage)))
@@ -173,7 +131,6 @@ class ClusteringServer:
     def cluster(self):
         db = DBSCAN(eps=0.5, min_samples=2).fit(self.X)
         labels = db.labels_
-        # Number of clusters in labels, ignoring noise if present.
         n_clusters_ = len(set(labels)) - (1 if -1 in labels else 0)
         print('Estimated number of clusters: %d' % n_clusters_)
         for index, label in enumerate(labels):
@@ -183,8 +140,6 @@ class ClusteringServer:
 
             source = os.path.join(self.targetFolder, "crop")
             source = os.path.join(source, filename)
-            # if not os.path.exists(self.targetFolder):
-            #     os.makedirs(self.targetFolder)
 
             destination = os.path.join(self.targetFolder, label)
             if not os.path.exists(destination):
@@ -214,8 +169,6 @@ class ClusteringServer:
                 continue
             
             phash = str(imagehash.phash(Image.fromarray(alignedFace)))
-            # print("phash = "+phash)
-            # print("self.Y = "+self.Y)
             
             baseRep = net.forward(alignedFace)
             for index, cropFile in enumerate(self.Y):
@@ -228,7 +181,6 @@ class ClusteringServer:
                     drep = np.dot(d, d)
                     print("Squared l2 distance between representations: {:0.3f}".format(drep))
                     
-                    # destination = os.path.join(self.targetFolder, "else")
                     if drep < args.dth:
                         print("found user")
                         foundCnt = foundCnt+1
@@ -242,7 +194,6 @@ class ClusteringServer:
             
     def convertImageToRgbFrame(self,img):
         imarr = np.asarray(img)
-        # print("imarr = {}".format(imarr))
         buf = np.fliplr(np.asarray(img))
         rgbFrame = np.zeros((img.height, img.width, 3), dtype=np.uint8)
         rgbFrame[:, :, 0] = buf[:, :, 2]
@@ -259,8 +210,6 @@ def main(reactor):
         clusteringServer.cluster()
     else:
         clusteringServer.detect()
-
-    
 
 if __name__ == '__main__':
     main(sys.argv)

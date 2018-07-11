@@ -51,7 +51,6 @@ from sklearn.naive_bayes import GaussianNB
 from sklearn.externals import joblib
 
 fileDir = os.path.dirname(os.path.realpath(__file__))
-# modelDir = os.path.join(fileDir, '..', 'models')
 modelDir = os.path.join(fileDir, '..', '..', 'models')
 dlibModelDir = os.path.join(modelDir, 'dlib')
 openfaceModelDir = os.path.join(modelDir, 'openface')
@@ -198,26 +197,15 @@ def train(args):
         print("name '{}'".format(name))
         img = images[name]
         print("img file '{}'".format(img))
-        # try:
         r = getRep(img, False)[0]
-        # rep = r[1].reshape(1, -1)
         rep = r[1]
         newFace = Face(rep, i)
         people[i] = newFace
-        # except:
-        #     print("no face found")
         i += 1
     
     fName = "{}/working_people.json".format(args.workDir)
     print("Saving working_people to '{}'".format(fName))
     joblib.dump(people, fName)
-
-    # with open(fName, 'wb') as f:
-    #     json.dump(people, f)
-
-# def loadPeople(args):
-#     newFace = Face(rep, identity,phash,content,name)
-#     self.people[identity] = newFace
 
 def infer(args, multiple=False):
     with open(args.classifierModel, 'rb') as f:

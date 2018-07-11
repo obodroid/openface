@@ -30,13 +30,6 @@ class Face:
         jsonObj = json.dumps(self, default=lambda o: o.__dict__)
         print("jsonObj - {}".format(jsonObj))
         return jsonObj
-        # return {
-        #     rep:self.rep,
-        #     identity:self.identity,
-        #     phash:self.phash,
-        #     content:self.content,
-        #     name:self.name,
-        # }
 
     def __repr__(self):
         return "{{id: {}, rep[0:5]: {}, phash:{}, content:{}, name:{}}}".format(

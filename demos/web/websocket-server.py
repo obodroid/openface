@@ -33,7 +33,6 @@ from twisted.internet.ssl import DefaultOpenSSLContextFactory
 
 from twisted.python import log
 
-
 from face import Face
 
 import httplib, urllib
@@ -56,7 +55,6 @@ from sklearn.svm import SVC
 from sklearn.ensemble import IsolationForest
 from sklearn.externals import joblib
 
-
 import matplotlib as mpl
 mpl.use('Agg')
 import matplotlib.pyplot as plt
@@ -67,6 +65,7 @@ import openface
 modelDir = os.path.join(fileDir, '..', '..', 'models')
 dlibModelDir = os.path.join(modelDir, 'dlib')
 openfaceModelDir = os.path.join(modelDir, 'openface')
+
 # For TLS connections
 tls_crt = os.path.join(fileDir, 'tls', 'server.crt')
 tls_key = os.path.join(fileDir, 'tls', 'server.key')
@@ -84,9 +83,7 @@ parser.add_argument('--unknown', type=bool, default=False,
 parser.add_argument('--port', type=int, default=9000,
                     help='WebSocket Port')
 parser.add_argument('--apiURL', type=str,
-                    help="Face Server API url.", default="192.168.1.243:8540")
-# parser.add_argument('--apiURL', type=str,
-                    # help="Face Server API url.", default="203.150.95.168:8540")
+                    help="Face Server API url.", default="203.150.95.168:8540")
 parser.add_argument('--workingMode', type=str,
                     help="Working mode - db_master, on_server", default="on_server")
 parser.add_argument('--dth', type=str,
@@ -102,24 +99,6 @@ slideId = 0
 slideWindowSize = 5
 slideWindowFaces = {}
 
-# class Face:
-#     def __init__(self, rep, identity,phash=None,content=None,name=None):
-#         self.rep = rep
-#         self.identity = identity
-#         self.phash = phash
-#         self.content = content
-#         self.name = name
-
-#     def __repr__(self):
-#         return "{{id: {}, rep[0:5]: {}, phash:{}, content:{}, name:{}}}".format(
-#             str(self.identity),
-#             self.rep[0:5],
-#             self.phash,
-#             self.content,
-#             self.name
-#         )
-
-
 class OpenFaceServerProtocol(WebSocketServerProtocol):
     def __init__(self):
         super(OpenFaceServerProtocol, self).__init__()
@@ -130,7 +109,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             self.people = self.getPreTrainedModel("working_people.json",{})
             self.preSvm = self.getPreTrainedModel("working_svm.pkl")
         else:
-            # self.getFacesFromAPI()
             self.people = self.getPreTrainedModel("db_people.json",{})
             self.preSvm = self.getPreTrainedModel("db_svm.pkl")
 
@@ -166,9 +144,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             self.training = msg['val']
             if not self.training:
                 self.trainSVM()
-        # elif msg['type'] == "ADD_PERSON":
-        #     self.people.append(msg['val'].encode('ascii', 'ignore'))
-        #     print(self.people)
         elif msg['type'] == "UPDATE_IDENTITY":
             h = msg['hash'].encode('ascii', 'ignore')
             if h in self.images:
@@ -207,9 +182,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             self.images[h] = Face(np.array(jsImage['representation']),
                                   jsImage['identity'])
 
-        # for jsPerson in jsPeople:
-        #     self.people.append(jsPerson.encode('ascii', 'ignore'))
-
         if not training:
             self.trainSVM()
 
@@ -235,7 +207,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             if numUnknownAdd > 0:
                 print("+ Augmenting with {} unknown images.".format(numUnknownAdd))
                 for rep in self.unknownImgs[:numUnknownAdd]:
-                    # print(rep)
                     X.append(rep)
                     y.append(-1)
 
@@ -256,8 +227,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
         yVals = list(np.unique(y))
         colors = cm.rainbow(np.linspace(0, 1, len(yVals)))
-
-        # print(yVals)
 
         plt.figure()
         for c, i in zip(colors, yVals):
@@ -286,7 +255,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
     def trainSVM(self):
         print("+ Training SVM on {} labeled images.".format(len(self.images)))
         d = self.getData()
-        # print("data - {}".format(d))
         if d is None:
             self.svm = None
             return
@@ -320,7 +288,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 print("Squared l2 distance between representations: {:0.3f}".format(drep))
                 
                 if drep < args.dth:
-                    # assign previous id
                     print("assign previous id")
                     foundSimilarRep = True
                     unknownIdentity = previousFace.identity
@@ -333,7 +300,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             unknownIdentity = "Unknown_"+str(self.countUnknown)
             self.countUnknown += 1 
 
-        # content = [str(x) for x in alignedFace.flatten()]
         face = Face(rep, unknownIdentity,phash,content)
         face.robotId = robotId
         face.videoId = videoId
@@ -363,8 +329,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 "representation": identifyingFace.rep.tolist()
             }
             self.sendMessage(json.dumps(msg))
-
-            #TODO need to change robot_id, video_id
+            
             aiMsg = {
                 "type": "FOUND_USER",
                 "robotId":identifyingFace.robotId,
@@ -377,8 +342,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 "name": name
             }
             self.sendMessage(json.dumps(aiMsg))
-            # print(json.dumps(msg))
-            # self.sendToAPI(apiMsg)
     
         del self.unknowns[unknownIdentity]
         self.trainSVM()
@@ -410,12 +373,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         dbFaces = results["results"]
         conn.close()
         print("results -{}".format(results))
-        # for img in dbFaces:
-            # print("img-{}".format(img))
-            # self.images[img.phash] = img
-            # print(img.rep)
-
-        # return self.images
 
     def getPeopleFromAPI(self,msg):
         url = args.apiURL
@@ -427,7 +384,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         conn.close()
 
     def processFrame(self, msg):
-
         dataURL= msg['dataURL']
         identity = msg['identity']
         if msg.has_key("robotId"):
@@ -448,34 +404,22 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         imgF.seek(0)
         img = Image.open(imgF)
 
-        buf = np.fliplr(np.asarray(img)) 
-        # print("height: {:0.3f}, width: {:0.3f}".format(img.height,img.width))
+        buf = np.fliplr(np.asarray(img))
 
         rgbFrame = np.zeros((img.height, img.width, 3), dtype=np.uint8)
         rgbFrame[:, :, 0] = buf[:, :, 2]
         rgbFrame[:, :, 1] = buf[:, :, 1]
         rgbFrame[:, :, 2] = buf[:, :, 0]
 
-        # if not self.training:
         annotatedFrame = np.copy(buf)
 
-        # cv2.imshow('frame', rgbFrame)
-        # if cv2.waitKey(1) & 0xFF == ord('q'):
-        #     return
-
         global slideId
-        # if len(slideWindowFaces) > slideWindowSize+1:
-        #     slideWindowFaces.pop(slideId-slideWindowSize-1)
-
-        # print("tmpReps.values() = {}".format(slideWindowFaces.values()))
         slideWindowFaces[slideId] = []
         identities = []
-        # bbs = align.getAllFaceBoundingBoxes(rgbFrame)
         bb = align.getLargestFaceBoundingBox(rgbFrame)
         bbs = [bb] if bb is not None else []
 
         for bb in bbs:
-            # print(len(bbs))
             print("bb = {}".format(bb))
             print("bb width = {}, height = {}".format(bb.width(),bb.height()))
 
@@ -494,16 +438,11 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     continue
                 
                 phash = str(imagehash.phash(Image.fromarray(alignedFace)))
-                print("phash = "+phash)
+                print("phash = " + phash)
                 
                 identity = -1 #unknown
                 unknownIdentity = None
                 rep = net.forward(alignedFace)
-                # content = [str(x) for x in alignedFace.flatten()]
-
-                # content = [str(x) for x in cropImage.flatten()]
-                # base64.b64encode(cropImage)
-                # decode_img = cv2.imdecode(cropImage, cv2.CV_LOAD_IMAGE_COLOR)
                 cropImage = cropImage[:, :, ::-1].copy() # RGB to BGR for PIL image
                 cropPIL = scipy.misc.toimage(cropImage)
                 buf_crop = StringIO.StringIO()
@@ -514,7 +453,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 if phash in self.images:
                     identity = self.images[phash].identity
                 elif self.preSvm:
-                    print("has pre-trained svm")
                     predictIdentity = self.preSvm.predict([rep])[0]
                     predictPeople = self.people[predictIdentity]
                     d = rep - predictPeople.rep
@@ -524,27 +462,16 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     if drep < args.dth:
                         identity = predictIdentity
                     
-                    # print("msg - {}".format(msg))
                     if msg.has_key("sourceFolder"):
                         print("identity - {}, name - {}, drep - {}, imageFile - {}".format(identity,predictPeople,drep,msg["imageFile"]))
                         return
 
-                    # prob = self.svm.predict_proba(rep)
-                    # predictions = self.preSvm.predict_proba([rep]).ravel()
-                    # maxI = np.argmax(predictions)
-                    # confidence = predictions[maxI]
-                    # inline = self.preIsoForest.predict([rep])
-                    # print("pre-trained inline = {}, confidence = {}".format(inline,confidence))
-                    # if inline == 1:
-                    #     identity = self.preSvm.predict([rep])[0]
-                    #     name = self.people[identity].name
                 elif len(self.people)==1:
                     foundSimilarRep = False
                     d = rep - self.firstPeopleRep
                     drep = np.dot(d, d)
                     print("Squared l2 distance between representations: {:0.3f}".format(drep))
                     if drep < args.dth:
-                        # assign previous id
                         print("assign first id")
                         foundSimilarRep = True
                         identity = 0
@@ -558,7 +485,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                         }
                         self.sendMessage(json.dumps(msg))
                     else:
-                        # unknown check flow
                         unknownIdentity = self.checkUnknown(rep,content,phash,robotId,videoId)
                         if len(self.unknowns[unknownIdentity]) >= 5:
                             identity = self.newIdentity(rep,unknownIdentity,phash,content)
@@ -579,7 +505,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                             if len(self.unknowns[unknownIdentity]) >= 5:
                                 identity = self.newIdentity(rep,unknownIdentity,phash,content)
                     else:
-                        # unknown check flow
                         unknownIdentity = self.checkUnknown(rep,content,phash,robotId,videoId)
                         if len(self.unknowns[unknownIdentity]) >= 5:
                             identity = self.newIdentity(rep,unknownIdentity,phash,content)
@@ -588,21 +513,9 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     identities.append(identity)
 
                 print("identity - {}".format(identity))
-                # msg = {
-                #         "type": "NEW_IMAGE",
-                #         "hash": phash,
-                #         "content": content,
-                #         "identity": identity,
-                #         "representation": rep.tolist()
-                #     }
-                # self.sendMessage(json.dumps(msg))
-
-                # currentFace = None
                 if identity == -1:
                     name = unknownIdentity
-                    # currentFace = self.unknowns[unknownIdentity][0]
                 else:
-                    # currentFace = self.images[phash]
                     name = self.people[identity].name
                     aiMsg = {
                         "type": "FOUND_USER",
@@ -639,12 +552,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     "content": content
                 }
                 plt.close()
-                # self.sendMessage(json.dumps(msg))
-
-                # if need save input file
-                # filename = name+'_'+str(slideId)+'.jpg'
-                # with open(filename, 'wb') as f:
-                #     f.write(imgdata.buf)
 
         slideId +=1
 
