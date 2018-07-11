@@ -114,7 +114,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
         self.svm = None
         self.countUnknown = 0
-        self.firstPeopleRep = None if len(self.people) < 1 else self.people[0].rep
+        # self.firstPeopleRep = None if len(self.people) < 1 else self.people[0].rep
         self.unknowns = {}
         print("apiURL = "+args.apiURL)
 
@@ -278,8 +278,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             # self.isoForest.fit(X,y)
             # savePickle = pickle.dump(self.svm, open( "face_svm.pkl", "wb"))
 
-    def checkUnknown(self,rep,content,phash,robotId,videoId):
-
+    def hasFoundSimilarFace(self,rep):
         foundSimilarRep = False
         for previousFaces in slideWindowFaces.values():
             for previousFace in previousFaces:
@@ -290,65 +289,47 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 if drep < args.dth:
                     print("assign previous id")
                     foundSimilarRep = True
-                    unknownIdentity = previousFace.identity
+                    # unknownIdentity = previousFace.identity
                     break
             else:
                 continue  # executed if the loop ended normally (no break)
             break  # executed if 'continue' was skipped (break)
 
-        if not foundSimilarRep:
-            unknownIdentity = "Unknown_"+str(self.countUnknown)
-            self.countUnknown += 1 
-
-        face = Face(rep, unknownIdentity,phash,content)
-        face.robotId = robotId
-        face.videoId = videoId
-        self.unknowns.setdefault(unknownIdentity, []).append(face)
-        slideWindowFaces[slideId].append(face)
-        return unknownIdentity
-
-    def newIdentity(self,rep,unknownIdentity,phash=None,content=None):
-        
+        return foundSimilarRep
+    
+    def newFaceIdentity(self,rep,phash=None,content=None):
         identity = len(self.people)
-        if len(self.people)==0:
-            self.firstPeopleRep = rep
+        # if len(self.people)==0:
+        #     self.firstPeopleRep = rep
 
         name = "User "+str(identity)
 
-        if name not in self.people:
-            newFace = Face(rep, identity,phash,content,name)
-            self.people[identity] = newFace
+        newFace = Face(rep, identity,phash,content,name)
+        self.people[identity] = newFace
+        self.images[phash] = newFace
+        msg = {
+            "type": "NEW_IMAGE",
+            "hash": phash,
+            "content": content,
+            "identity": identity,
+            "representation": rep.tolist()
+        }
+        self.sendMessage(json.dumps(msg))
+        return newFace
 
-        for identifyingFace in self.unknowns[unknownIdentity]:
-            self.images[identifyingFace.phash] = Face(identifyingFace.rep, identity,identifyingFace.phash,identifyingFace.content)
-            msg = {
-                "type": "NEW_IMAGE",
-                "hash": identifyingFace.phash,
-                "content": identifyingFace.content,
-                "identity": identity,
-                "representation": identifyingFace.rep.tolist()
-            }
-            self.sendMessage(json.dumps(msg))
-            
-            aiMsg = {
-                "type": "FOUND_USER",
-                "robotId":identifyingFace.robotId,
-                "videoId":identifyingFace.videoId,
-                "phash": identifyingFace.phash,
-                "content": identifyingFace.content,
-                "predict_face_id": identity,
-                "rep": identifyingFace.rep.tolist(),
-                "time": time.time(),
-                "name": name
-            }
-            self.sendMessage(json.dumps(aiMsg))
-    
-        del self.unknowns[unknownIdentity]
-        self.trainSVM()
-
-        joblib.dump(self.people, 'working_people.json')
-        joblib.dump(self.svm, 'working_svm.pkl')
-        return identity
+    def foundUser(self,robotId,videoId,face):
+        aiMsg = {
+            "type": "FOUND_USER",
+            "robotId":robotId,
+            "videoId":videoId,
+            "phash": face.phash,
+            "content": face.content,
+            "predict_face_id": face.identity,
+            "rep": face.rep.tolist(),
+            "time": time.time(),
+            "name": face.name
+        }
+        self.sendMessage(json.dumps(aiMsg))
 
     def sendToAPI(self,msg):
         url = args.apiURL
@@ -441,7 +422,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 print("phash = " + phash)
                 
                 identity = -1 #unknown
-                unknownIdentity = None
+                # unknownIdentity = None
                 rep = net.forward(alignedFace)
                 cropImage = cropImage[:, :, ::-1].copy() # RGB to BGR for PIL image
                 cropPIL = scipy.misc.toimage(cropImage)
@@ -450,86 +431,44 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 content = base64.b64encode(buf_crop.getvalue())
                 content= 'data:image/png;base64,' + content
 
-                if phash in self.images:
-                    identity = self.images[phash].identity
-                elif self.preSvm:
-                    predictIdentity = self.preSvm.predict([rep])[0]
-                    predictPeople = self.people[predictIdentity]
-                    d = rep - predictPeople.rep
-                    drep = np.dot(d, d)
-                    print("distance of prediction: {:0.3f}".format(drep))
-                    
-                    if drep < args.dth:
-                        identity = predictIdentity
-                    
-                    if msg.has_key("sourceFolder"):
-                        print("identity - {}, name - {}, drep - {}, imageFile - {}".format(identity,predictPeople,drep,msg["imageFile"]))
-                        return
+                # if phash in self.images:
+                #     identity = self.images[phash].identity
+                # else:
 
-                elif len(self.people)==1:
-                    foundSimilarRep = False
-                    d = rep - self.firstPeopleRep
-                    drep = np.dot(d, d)
-                    print("Squared l2 distance between representations: {:0.3f}".format(drep))
-                    if drep < args.dth:
-                        print("assign first id")
-                        foundSimilarRep = True
-                        identity = 0
-                        self.images[phash] = Face(rep, identity,phash,content)
-                        msg = {
-                            "type": "NEW_IMAGE",
-                            "hash": phash,
-                            "content": content,
-                            "identity": identity,
-                            "representation": rep.tolist()
-                        }
-                        self.sendMessage(json.dumps(msg))
-                    else:
-                        unknownIdentity = self.checkUnknown(rep,content,phash,robotId,videoId)
-                        if len(self.unknowns[unknownIdentity]) >= 5:
-                            identity = self.newIdentity(rep,unknownIdentity,phash,content)
-                
-                if (identity == -1) & (unknownIdentity == None):
-                    if self.svm:
-                        print("has svm")
-                        predictIdentity = self.svm.predict([rep])[0]
-                        predictPeople = self.people[predictIdentity]
-                        d = rep - predictPeople.rep
-                        drep = np.dot(d, d)
-                        print("distance of prediction: {:0.3f}".format(drep))
-                        
-                        if drep < args.dth:
-                            identity = predictIdentity
-                        else:
-                            unknownIdentity = self.checkUnknown(rep,content,phash,robotId,videoId)
-                            if len(self.unknowns[unknownIdentity]) >= 5:
-                                identity = self.newIdentity(rep,unknownIdentity,phash,content)
-                    else:
-                        unknownIdentity = self.checkUnknown(rep,content,phash,robotId,videoId)
-                        if len(self.unknowns[unknownIdentity]) >= 5:
-                            identity = self.newIdentity(rep,unknownIdentity,phash,content)
+                if not self.hasFoundSimilarFace(rep):
+                    # TODO: using new model prediction
+                    if self.preSvm: # no preSvm, just face-detection (not recognition)
+                        predictIdentity = self.preSvm.predict([rep])[0]
+                        name = self.people[predictIdentity]
+                        foundFace = Face(rep, predictIdentity, phash, content, name)
+
+                        # TODO: need condition to check confidence or probability that is much enough to decide if person is unknown or not
+
+                        # might not necessary to recheck again
+                        # predictFace = self.people[predictIdentity]
+                        # d = rep - predictFace.rep
+                        # drep = np.dot(d, d)
+                        # print("distance of prediction: {:0.3f}".format(drep))
+                        # if drep > args.dth:
+                        #     foundFace = self.newFaceIdentity(rep,phash,content)
+                        # else :
+                        #     foundFace = Face(rep, predictIdentity,phash,content,name)
+
+                        # if msg.has_key("sourceFolder"):
+                        #     print("identity - {}, name - {}, drep - {}, imageFile - {}".format(identity,predictPeople,drep,msg["imageFile"]))
+                        #     return
+                    else :
+                        foundFace = self.newFaceIdentity(rep,phash,content)
+                    
+                    slideWindowFaces[slideId].append(foundFace)
+                    identity = foundFace.identity
+                    self.foundUser(robotId,videoId,foundFace)
+                else :
+                    # just drop similar face, do nothing
+                    continue
 
                 if identity not in identities:
                     identities.append(identity)
-
-                print("identity - {}".format(identity))
-                if identity == -1:
-                    name = unknownIdentity
-                else:
-                    name = self.people[identity].name
-                    aiMsg = {
-                        "type": "FOUND_USER",
-                        "robotId":robotId,
-                        "videoId":videoId,
-                        "phash": phash,
-                        "content": content,
-                        "predict_face_id": identity,
-                        "rep": rep.tolist(),
-                        "time": time.time(),
-                        "name": name
-                    }
-                    self.sendMessage(json.dumps(aiMsg))
-                print("name - {}".format(name))
 
                 msg = {
                     "type": "IDENTITIES",
