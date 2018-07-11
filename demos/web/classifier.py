@@ -41,7 +41,6 @@ import pandas as pd
 import openface
 
 from sklearn.pipeline import Pipeline
-# from sklearn.lda import LDA
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 from sklearn.preprocessing import LabelEncoder
 from sklearn.svm import SVC
