@@ -131,8 +131,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
     def onMessage(self, payload, isBinary):
         raw = payload.decode('utf8')
         msg = json.loads(raw)
-        print("Received {} message of length {}.".format(
-            msg['type'], len(raw)))
+        # print("Received {} message of length {}.".format(
+        #     msg['type'], len(raw)))
         if msg['type'] == "ALL_STATE":
             self.loadState(msg['images'], msg['training'], msg['people'])
         elif msg['type'] == "NULL":
@@ -280,6 +280,13 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
     def hasFoundSimilarFace(self,rep):
         foundSimilarRep = False
+        print("slideWindowFaces - {}".format(slideWindowFaces.keys()))
+         
+        for key in slideWindowFaces.keys():
+            if key < slideId - slideWindowSize:
+                del slideWindowFaces[key]
+
+        # print("last 5 slideWindowFaces - {}".format(slideWindowFaces[-5:]))
         for previousFaces in slideWindowFaces.values():
             for previousFace in previousFaces:
                 d = rep - previousFace.rep
@@ -365,6 +372,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         conn.close()
 
     def processFrame(self, msg):
+
+        print("processFrame at keyframe - {}".format(msg['keyframe']))
         dataURL= msg['dataURL']
         identity = msg['identity']
         if msg.has_key("robotId"):
@@ -463,6 +472,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     slideWindowFaces[slideId].append(foundFace)
                     identity = foundFace.identity
                     self.foundUser(robotId,videoId,foundFace)
+                    print("found user id: {} at keyframe - {}".format(foundFace.identity,msg['keyframe']))
                 else :
                     # just drop similar face, do nothing
                     continue
