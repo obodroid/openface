@@ -1,4 +1,11 @@
 #!/usr/bin/env python2
+import ptvsd
+
+# Allow other computers to attach to ptvsd at this IP address and port, using the secret
+ptvsd.enable_attach("my_secret", address = ('0.0.0.0', 3000))
+# Pause the program until a remote debugger is attached
+ptvsd.wait_for_attach()
+
 import time
 
 start = time.time()
@@ -21,6 +28,7 @@ openfaceModelDir = os.path.join(modelDir, 'openface')
 parser = argparse.ArgumentParser()
 
 parser.add_argument('imgs', type=str, nargs='+', help="Input images.")
+parser.add_argument('outputDir', type=str, help="Output directory of aligned images.")
 parser.add_argument('--dlibFacePredictor', type=str, help="Path to dlib's face predictor.",
                     default=os.path.join(dlibModelDir, "shape_predictor_68_face_landmarks.dat"))
 parser.add_argument('--networkModel', type=str, help="Path to Torch network model.",
@@ -84,8 +92,13 @@ def getRep(imgPath):
     start = time.time()
 
     reps = []
+    i = 1
     for alignedFace in alignedFaces:
+        (inputImageName, ext) = os.path.splitext(os.path.basename(imgPath))
+        outputImgPath = "{}.jpg".format(os.path.join(args.outputDir, inputImageName + '-' + str(i)))
+        cv2.imwrite(outputImgPath, alignedFace)
         reps.append(net.forward(alignedFace))
+        i = i + 1
 
     if args.verbose:
         print("Neural network forward pass took {} seconds.".format(
@@ -93,9 +106,9 @@ def getRep(imgPath):
 
     for bb in bbs:
         cv2.rectangle(bgrImg,(bb.left(), bb.top()), (bb.right(), bb.bottom()),(0,255,0),2)
-    cv2.imshow('image', bgrImg)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    # cv2.imshow('image', bgrImg)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
 
     return (reps,bbs)
 
@@ -103,4 +116,3 @@ for img in args.imgs:
     repsAndBBs = getRep(img)
     reps = repsAndBBs[0]
     bbs = repsAndBBs[1]
-    break
