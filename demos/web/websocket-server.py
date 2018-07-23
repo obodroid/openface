@@ -45,6 +45,7 @@ import numpy as np
 import StringIO
 import base64
 import time
+import datetime
 import ssl
 import scipy.misc
 
@@ -333,7 +334,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             "content": face.content,
             "predict_face_id": face.identity,
             "rep": face.rep.tolist(),
-            "time": time.time(),
+            "time": datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'),
             "name": face.name
         }
         self.sendMessage(json.dumps(aiMsg))
@@ -448,7 +449,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     # TODO: using new model prediction
                     if self.preSvm: # no preSvm, just face-detection (not recognition)
                         predictIdentity = self.preSvm.predict([rep])[0]
-                        name = self.people[predictIdentity]
+                        name = self.people[predictIdentity].name
                         foundFace = Face(rep, predictIdentity, phash, content, name)
 
                         # TODO: need condition to check confidence or probability that is much enough to decide if person is unknown or not
