@@ -115,7 +115,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
         self.svm = None
         self.countUnknown = 0
-        # self.firstPeopleRep = None if len(self.people) < 1 else self.people[0].rep
         self.unknowns = {}
         print("apiURL = "+args.apiURL)
 
@@ -132,8 +131,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
     def onMessage(self, payload, isBinary):
         raw = payload.decode('utf8')
         msg = json.loads(raw)
-        # print("Received {} message of length {}.".format(
-        #     msg['type'], len(raw)))
+        
         if msg['type'] == "ALL_STATE":
             self.loadState(msg['images'], msg['training'], msg['people'])
         elif msg['type'] == "NULL":
@@ -275,9 +273,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                  'kernel': ['rbf']}
             ]
             self.svm = GridSearchCV(SVC(C=1,probability=True,decision_function_shape='ovr'), param_grid, cv=5).fit(X, y)
-            # self.isoForest = IsolationForest(max_samples=100)
-            # self.isoForest.fit(X,y)
-            # savePickle = pickle.dump(self.svm, open( "face_svm.pkl", "wb"))
 
     def hasFoundSimilarFace(self,rep):
         foundSimilarRep = False
@@ -287,7 +282,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             if key < slideId - slideWindowSize:
                 del slideWindowFaces[key]
 
-        # print("last 5 slideWindowFaces - {}".format(slideWindowFaces[-5:]))
         for previousFaces in slideWindowFaces.values():
             for previousFace in previousFaces:
                 d = rep - previousFace.rep
@@ -297,19 +291,15 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 if drep < args.dth:
                     print("assign previous id")
                     foundSimilarRep = True
-                    # unknownIdentity = previousFace.identity
                     break
             else:
-                continue  # executed if the loop ended normally (no break)
-            break  # executed if 'continue' was skipped (break)
+                continue
+            break
 
         return foundSimilarRep
     
     def newFaceIdentity(self,rep,phash=None,content=None):
         identity = len(self.people)
-        # if len(self.people)==0:
-        #     self.firstPeopleRep = rep
-
         name = "User "+str(identity)
 
         newFace = Face(rep, identity,phash,content,name)
@@ -373,7 +363,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         conn.close()
 
     def processFrame(self, msg):
-
         print("processFrame at keyframe - {}".format(msg['keyframe']))
         dataURL= msg['dataURL']
         identity = msg['identity']
@@ -431,8 +420,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 phash = str(imagehash.phash(Image.fromarray(alignedFace)))
                 print("phash = " + phash)
                 
-                identity = -1 #unknown
-                # unknownIdentity = None
+                identity = -1
                 rep = net.forward(alignedFace)
                 cropImage = cropImage[:, :, ::-1].copy() # RGB to BGR for PIL image
                 cropPIL = scipy.misc.toimage(cropImage)
@@ -441,32 +429,12 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 content = base64.b64encode(buf_crop.getvalue())
                 content= 'data:image/png;base64,' + content
 
-                # if phash in self.images:
-                #     identity = self.images[phash].identity
-                # else:
-
                 if not self.hasFoundSimilarFace(rep):
-                    # TODO: using new model prediction
-                    if self.preSvm: # no preSvm, just face-detection (not recognition)
+                    if self.preSvm:
                         predictIdentity = self.preSvm.predict([rep])[0]
                         name = self.people[predictIdentity].name
                         foundFace = Face(rep, predictIdentity, phash, content, name)
 
-                        # TODO: need condition to check confidence or probability that is much enough to decide if person is unknown or not
-
-                        # might not necessary to recheck again
-                        # predictFace = self.people[predictIdentity]
-                        # d = rep - predictFace.rep
-                        # drep = np.dot(d, d)
-                        # print("distance of prediction: {:0.3f}".format(drep))
-                        # if drep > args.dth:
-                        #     foundFace = self.newFaceIdentity(rep,phash,content)
-                        # else :
-                        #     foundFace = Face(rep, predictIdentity,phash,content,name)
-
-                        # if msg.has_key("sourceFolder"):
-                        #     print("identity - {}, name - {}, drep - {}, imageFile - {}".format(identity,predictPeople,drep,msg["imageFile"]))
-                        #     return
                     else :
                         foundFace = self.newFaceIdentity(rep,phash,content)
                     
@@ -475,7 +443,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     self.foundUser(robotId,videoId,foundFace)
                     print("found user id: {} at keyframe - {}".format(foundFace.identity,msg['keyframe']))
                 else :
-                    # just drop similar face, do nothing
                     continue
 
                 if identity not in identities:
