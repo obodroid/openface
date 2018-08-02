@@ -107,16 +107,12 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         self.training = True
 
         if args.workingMode == "on_server":
-            self.people = self.getPreTrainedModel("working_people.json",{})
-            self.preSvm = self.getPreTrainedModel("working_svm.pkl")
+            (self.people, self.svm) = self.getPreTrainedModel("working_svm.pkl")
         else:
-            self.people = self.getPreTrainedModel("db_people.json",{})
-            self.preSvm = self.getPreTrainedModel("db_svm.pkl")
+            (self.people, self.svm) = self.getPreTrainedModel("db_svm.pkl")
 
-        self.svm = None
-        self.countUnknown = 0
         self.unknowns = {}
-        print("apiURL = "+args.apiURL)
+        print("apiURL = " + args.apiURL)
 
         if args.unknown:
             self.unknownImgs = np.load("./examples/web/unknown.npy")
@@ -245,7 +241,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         }
         self.sendMessage(json.dumps(msg))
 
-    def getPreTrainedModel(self,filename,defaultValue=None):
+    def getPreTrainedModel(self, filename, defaultValue=None):
         if os.path.isfile(filename):
             return joblib.load(filename)
         else:
@@ -298,12 +294,12 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
         return foundSimilarRep
     
-    def newFaceIdentity(self,rep,phash=None,content=None):
-        identity = len(self.people)
-        name = "User "+str(identity)
+    def newFaceIdentity(self, rep, phash=None, content=None):
+        identity = len(self.unknowns)
+        name = "User " + str(identity)
 
         newFace = Face(rep, identity,phash,content,name)
-        self.people[identity] = newFace
+        self.unknowns[identity] = newFace
         self.images[phash] = newFace
         msg = {
             "type": "NEW_IMAGE",
@@ -363,7 +359,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         conn.close()
 
     def processFrame(self, msg):
-        print("processFrame at keyframe - {}".format(msg['keyframe']))
         dataURL= msg['dataURL']
         identity = msg['identity']
         if msg.has_key("robotId"):
@@ -429,19 +424,21 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 content = base64.b64encode(buf_crop.getvalue())
                 content= 'data:image/png;base64,' + content
 
-                if not self.hasFoundSimilarFace(rep):
-                    if self.preSvm:
-                        predictIdentity = self.preSvm.predict([rep])[0]
-                        name = self.people[predictIdentity].name
-                        foundFace = Face(rep, predictIdentity, phash, content, name)
-
-                    else :
-                        foundFace = self.newFaceIdentity(rep,phash,content)
+                if not self.hasFoundSimilarFace(rep) and self.svm:
+                    predictions = self.svm.predict_proba(rep.reshape(1, -1)).ravel()
+                    maxI = np.argmax(predictions)
+                    person = self.people.inverse_transform(maxI)
+                    confidence = predictions[maxI]
+                    name = person.decode('utf-8')
+                    if confidence > 0.5:
+                        foundFace = Face(rep, maxI, phash, content, name)
+                    else:
+                        foundFace = self.newFaceIdentity(rep, phash, content)
                     
                     slideWindowFaces[slideId].append(foundFace)
                     identity = foundFace.identity
                     self.foundUser(robotId,videoId,foundFace)
-                    print("found user id: {} at keyframe - {}".format(foundFace.identity,msg['keyframe']))
+                    print("found user id: {}".format(foundFace.identity))
                 else :
                     continue
 

@@ -186,26 +186,7 @@ def train(args):
 
     fName = "{}/working_svm.pkl".format(args.workDir)
     print("Saving working_svm to '{}'".format(fName))
-    joblib.dump(clf, fName)
-
-    i = 0
-    people = {}
-    while i < nClasses:
-        person = le.inverse_transform(i)
-        print("person '{}'".format(person))
-        name=person.decode('utf-8')
-        print("name '{}'".format(name))
-        img = images[name]
-        print("img file '{}'".format(img))
-        r = getRep(img, False)[0]
-        rep = r[1]
-        newFace = Face(rep, i)
-        people[i] = newFace
-        i += 1
-    
-    fName = "{}/working_people.json".format(args.workDir)
-    print("Saving working_people to '{}'".format(fName))
-    joblib.dump(people, fName)
+    joblib.dump((le, clf), fName)
 
 def infer(args, multiple=False):
     with open(args.classifierModel, 'rb') as f:
@@ -236,21 +217,22 @@ def infer(args, multiple=False):
             maxI = np.argmax(predictions)
             person = le.inverse_transform(maxI)
             confidence = predictions[maxI]
-            name=person.decode('utf-8')
+            name = person.decode('utf-8') if confidence > 0.5 else 'unknown'
 
             if args.verbose:
                 print("Prediction took {} seconds.".format(time.time() - start))
+
             if multiple:
-                print("Predict {} @ x={} with {:.2f} confidence.".format(name, bbx,
-                                                                         confidence))
+                print("Predict {} @ x={} with {:.2f} confidence.".format(name, bbx, confidence))
             else:
                 print("Predict {} with {:.2f} confidence.".format(name, confidence))
+
             if isinstance(clf, GMM):
                 dist = np.linalg.norm(rep - clf.means_[maxI])
                 print("  + Distance from the mean: {}".format(dist))
             
             classFolder = os.path.join(source, name)
-            filename = str(count) + "-"+str(confidence)
+            filename = str(count) + "-" + str(confidence) + ".jpg"
             destination = os.path.join(classFolder, filename)
             if not os.path.exists(classFolder):
                 os.makedirs(classFolder)
