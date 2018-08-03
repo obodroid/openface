@@ -35,7 +35,8 @@ from twisted.python import log
 
 from face import Face
 
-import httplib, urllib
+import httplib
+import urllib
 import argparse
 import cv2
 import imagehash
@@ -99,6 +100,7 @@ align = openface.AlignDlib(args.dlibFacePredictor)
 net = openface.TorchNeuralNet(args.networkModel, imgDim=args.imgDim,
                               cuda=args.cuda)
 
+
 class OpenFaceServerProtocol(WebSocketServerProtocol):
     def __init__(self):
         super(OpenFaceServerProtocol, self).__init__()
@@ -127,7 +129,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
     def onMessage(self, payload, isBinary):
         raw = payload.decode('utf8')
         msg = json.loads(raw)
-        
+
         if msg['type'] == "ALL_STATE":
             self.loadState(msg['images'], msg['training'], msg['people'])
         elif msg['type'] == "NULL":
@@ -268,7 +270,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                  'gamma': [0.001, 0.0001],
                  'kernel': ['rbf']}
             ]
-            self.svm = GridSearchCV(SVC(C=1, probability=True), param_grid, cv=5).fit(X, y)
+            self.svm = GridSearchCV(
+                SVC(C=1, probability=True), param_grid, cv=5).fit(X, y)
 
     def hasFoundSimilarFace(self, rep):
         foundSimilarFace = False
@@ -284,8 +287,9 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             drep = np.dot(d, d)
 
             if args.verbose:
-                print("Squared l2 distance between representations: {:0.3f}".format(drep))
-            
+                print(
+                    "Squared l2 distance between representations: {:0.3f}".format(drep))
+
             if drep < args.dth:
                 print("similar face found")
                 foundSimilarFace = True
@@ -298,12 +302,12 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             })
 
         return foundSimilarFace
-    
+
     def newFaceIdentity(self, rep, phash=None, content=None):
         identity = len(self.unknowns)
         name = "User " + str(identity)
 
-        newFace = Face(rep, identity,phash,content,name)
+        newFace = Face(rep, identity, phash, content, name)
         self.unknowns[identity] = newFace
         self.images[phash] = newFace
         msg = {
@@ -320,8 +324,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         print("found user id: {}".format(face.identity))
         msg = {
             "type": "FOUND_USER",
-            "robotId":robotId,
-            "videoId":videoId,
+            "robotId": robotId,
+            "videoId": videoId,
             "phash": face.phash,
             "content": face.content,
             "predict_face_id": face.identity,
@@ -331,19 +335,21 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         }
         self.sendMessage(json.dumps(msg))
 
-    def sendToAPI(self,msg):
+    def sendToAPI(self, msg):
         url = args.apiURL
         params = json.dumps(msg).encode('utf8')
         headers = {"Content-type": "application/json"}
-        conn = httplib.HTTPSConnection(url,timeout=5, context=ssl._create_unverified_context())
-        conn.request("POST", "/face_images", params,headers)
+        conn = httplib.HTTPSConnection(
+            url, timeout=5, context=ssl._create_unverified_context())
+        conn.request("POST", "/face_images", params, headers)
         response = conn.getresponse()
         print response.status, response.reason
         conn.close()
 
     def getFacesFromAPI(self):
         url = args.apiURL
-        conn = httplib.HTTPSConnection(url,timeout=5, context=ssl._create_unverified_context())
+        conn = httplib.HTTPSConnection(
+            url, timeout=5, context=ssl._create_unverified_context())
         conn.request("GET", "/face_images?limit=10")
         response = conn.getresponse()
         print response.status, response.reason
@@ -355,10 +361,11 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         conn.close()
         print("results -{}".format(results))
 
-    def getPeopleFromAPI(self,msg):
+    def getPeopleFromAPI(self, msg):
         url = args.apiURL
         params = json.dumps(msg).encode('utf8')
-        conn = httplib.HTTPSConnection(url,timeout=5, context=ssl._create_unverified_context())
+        conn = httplib.HTTPSConnection(
+            url, timeout=5, context=ssl._create_unverified_context())
         conn.request("GET", "/people")
         response = conn.getresponse()
         print response.status, response.reason
@@ -366,17 +373,17 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
     def processFrame(self, msg):
         start = time.time()
-        dataURL= msg['dataURL']
+        dataURL = msg['dataURL']
         identity = msg['identity']
         identities = []
 
         if msg.has_key("robotId"):
-            robotId = msg['robotId'] 
+            robotId = msg['robotId']
         else:
             robotId = ""
-        
+
         if msg.has_key("videoId"):
-            videoId = msg['videoId'] 
+            videoId = msg['videoId']
         else:
             videoId = ""
 
@@ -398,46 +405,51 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         annotatedFrame = np.copy(buf)
 
         if args.verbose:
-            print("Create annotated frame at {} seconds.".format(time.time() - start))
+            print("Create annotated frame at {} seconds.".format(
+                time.time() - start))
 
         bb = align.getLargestFaceBoundingBox(rgbFrame)
         bbs = [bb] if bb is not None else []
 
         if args.verbose:
-            print("Get face bounding box at {} seconds.".format(time.time() - start))
+            print("Get face bounding box at {} seconds.".format(
+                time.time() - start))
 
         for bb in bbs:
             print("bb = {}".format(bb))
-            print("bb width = {}, height = {}".format(bb.width(),bb.height()))
+            print("bb width = {}, height = {}".format(bb.width(), bb.height()))
 
             cropImage = rgbFrame[bb.top():bb.bottom(), bb.left():bb.right()]
             landmarks = align.findLandmarks(rgbFrame, bb)
             alignedFace = align.align(args.imgDim, rgbFrame, bb,
-                                    landmarks=landmarks,
-                                    landmarkIndices=openface.AlignDlib.OUTER_EYES_AND_NOSE)
+                                      landmarks=landmarks,
+                                      landmarkIndices=openface.AlignDlib.OUTER_EYES_AND_NOSE)
             if alignedFace is None:
                 continue
 
             if args.verbose:
                 print("Align face at {} seconds.".format(time.time() - start))
-            
+
             phash = str(imagehash.phash(Image.fromarray(alignedFace)))
-            
+
             identity = -1
             rep = net.forward(alignedFace)
 
             if args.verbose:
-                print("Neural network forward pass at {} seconds.".format(time.time() - start))
+                print("Neural network forward pass at {} seconds.".format(
+                    time.time() - start))
 
-            cropImage = cropImage[:, :, ::-1].copy() # RGB to BGR for PIL image
+            # RGB to BGR for PIL image
+            cropImage = cropImage[:, :, ::-1].copy()
             cropPIL = scipy.misc.toimage(cropImage)
             buf_crop = StringIO.StringIO()
             cropPIL.save(buf_crop, format="PNG")
             content = base64.b64encode(buf_crop.getvalue())
-            content= 'data:image/png;base64,' + content
+            content = 'data:image/png;base64,' + content
 
             if not self.hasFoundSimilarFace(rep) and self.svm:
-                predictions = self.svm.predict_proba(rep.reshape(1, -1)).ravel()
+                predictions = self.svm.predict_proba(
+                    rep.reshape(1, -1)).ravel()
                 maxI = np.argmax(predictions)
                 person = self.people.inverse_transform(maxI)
                 confidence = predictions[maxI]
@@ -450,10 +462,10 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     foundFace = Face(rep, maxI, phash, content, name)
                 else:
                     foundFace = self.newFaceIdentity(rep, phash, content)
-                
+
                 identity = foundFace.identity
                 self.foundUser(robotId, videoId, foundFace)
-            else :
+            else:
                 continue
 
             if identity not in identities:
@@ -482,7 +494,9 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             plt.close()
 
         if args.verbose:
-            print("Process frame finished at {} seconds.".format(time.time() - start))
+            print("Process frame finished at {} seconds.".format(
+                time.time() - start))
+
 
 def main(reactor):
     log.startLogging(sys.stdout)
@@ -491,6 +505,7 @@ def main(reactor):
     ctx_factory = DefaultOpenSSLContextFactory(tls_key, tls_crt)
     reactor.listenSSL(args.port, factory, ctx_factory)
     return defer.Deferred()
+
 
 if __name__ == '__main__':
     task.react(main)
