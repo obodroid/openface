@@ -87,6 +87,8 @@ parser.add_argument('--apiURL', type=str,
                     help="Face Server API url.", default="203.150.95.168:8540")
 parser.add_argument('--workingMode', type=str,
                     help="Working mode - db_master, on_server", default="on_server")
+parser.add_argument('--recentFaceTimeout', type=int,
+                    help="Recent face timeout", default=10)
 parser.add_argument('--dth', type=str,
                     help="Representation distance threshold", default=0.5)
 
@@ -96,14 +98,11 @@ align = openface.AlignDlib(args.dlibFacePredictor)
 net = openface.TorchNeuralNet(args.networkModel, imgDim=args.imgDim,
                               cuda=args.cuda)
 
-slideId = 0
-slideWindowSize = 5
-slideWindowFaces = {}
-
 class OpenFaceServerProtocol(WebSocketServerProtocol):
     def __init__(self):
         super(OpenFaceServerProtocol, self).__init__()
         self.images = {}
+        self.recentFaces = []
         self.training = True
 
         if args.workingMode == "on_server":
@@ -270,29 +269,32 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             ]
             self.svm = GridSearchCV(SVC(C=1,probability=True,decision_function_shape='ovr'), param_grid, cv=5).fit(X, y)
 
-    def hasFoundSimilarFace(self,rep):
-        foundSimilarRep = False
-        print("slideWindowFaces - {}".format(slideWindowFaces.keys()))
-         
-        for key in slideWindowFaces.keys():
-            if key < slideId - slideWindowSize:
-                del slideWindowFaces[key]
+    def hasFoundSimilarFace(self, rep):
+        foundSimilarFace = False
 
-        for previousFaces in slideWindowFaces.values():
-            for previousFace in previousFaces:
-                d = rep - previousFace.rep
-                drep = np.dot(d, d)
-                print("Squared l2 distance between representations: {:0.3f}".format(drep))
-                
-                if drep < args.dth:
-                    print("assign previous id")
-                    foundSimilarRep = True
-                    break
-            else:
+        for recentFace in self.recentFaces:
+            timeDiff = datetime.datetime.now() - recentFace['time']
+
+            if timeDiff.total_seconds() > args.recentFaceTimeout:
+                self.recentFaces.remove(recentFace)
                 continue
-            break
 
-        return foundSimilarRep
+            d = rep - recentFace['rep']
+            drep = np.dot(d, d)
+            print("Squared l2 distance between representations: {:0.3f}".format(drep))
+            
+            if drep < args.dth:
+                print("similar face found")
+                foundSimilarFace = True
+                break
+
+        if not foundSimilarFace:
+            self.recentFaces.append({
+                'rep': rep,
+                'time': datetime.datetime.now()
+            })
+
+        return foundSimilarFace
     
     def newFaceIdentity(self, rep, phash=None, content=None):
         identity = len(self.unknowns)
@@ -312,7 +314,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         return newFace
 
     def foundUser(self,robotId,videoId,face):
-        aiMsg = {
+        msg = {
             "type": "FOUND_USER",
             "robotId":robotId,
             "videoId":videoId,
@@ -323,7 +325,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             "time": datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'),
             "name": face.name
         }
-        self.sendMessage(json.dumps(aiMsg))
+        self.sendMessage(json.dumps(msg))
 
     def sendToAPI(self,msg):
         url = args.apiURL
@@ -361,6 +363,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
     def processFrame(self, msg):
         dataURL= msg['dataURL']
         identity = msg['identity']
+        identities = []
+
         if msg.has_key("robotId"):
             robotId = msg['robotId'] 
         else:
@@ -387,10 +391,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         rgbFrame[:, :, 2] = buf[:, :, 0]
 
         annotatedFrame = np.copy(buf)
-
-        global slideId
-        slideWindowFaces[slideId] = []
-        identities = []
         bb = align.getLargestFaceBoundingBox(rgbFrame)
         bbs = [bb] if bb is not None else []
 
@@ -400,11 +400,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
             cropImage = rgbFrame[bb.top():bb.bottom(), bb.left():bb.right()]
             print("crop image : {}".format(len(cropImage)))
+            
             if (len(cropImage) > 0) & (bb.left() > 0) & (bb.right() > 0) & (bb.top() > 0) & (bb.bottom() > 0) :
-                cv2.imshow("cropped", cropImage)
-                if cv2.waitKey(1) & 0xFF == ord('q'):
-                    return
-
                 landmarks = align.findLandmarks(rgbFrame, bb)
                 alignedFace = align.align(args.imgDim, rgbFrame, bb,
                                         landmarks=landmarks,
@@ -435,9 +432,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     else:
                         foundFace = self.newFaceIdentity(rep, phash, content)
                     
-                    slideWindowFaces[slideId].append(foundFace)
                     identity = foundFace.identity
-                    self.foundUser(robotId,videoId,foundFace)
+                    self.foundUser(robotId, videoId, foundFace)
                     print("found user id: {}".format(foundFace.identity))
                 else :
                     continue
@@ -466,8 +462,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     "content": content
                 }
                 plt.close()
-
-        slideId +=1
 
 def main(reactor):
     log.startLogging(sys.stdout)
