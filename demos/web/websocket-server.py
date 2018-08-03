@@ -30,12 +30,10 @@ from autobahn.twisted.websocket import WebSocketServerProtocol, \
     WebSocketServerFactory
 from twisted.internet import task, defer
 from twisted.internet.ssl import DefaultOpenSSLContextFactory
-
 from twisted.python import log
 
 from face import Face
 
-import httplib
 import urllib
 import argparse
 import cv2
@@ -85,8 +83,6 @@ parser.add_argument('--unknown', type=bool, default=False,
                     help='Try to predict unknown people')
 parser.add_argument('--port', type=int, default=9000,
                     help='WebSocket Port')
-parser.add_argument('--apiURL', type=str,
-                    help="Face Server API url.", default="203.150.95.168:8540")
 parser.add_argument('--workingMode', type=str,
                     help="Working mode - db_master, on_server", default="on_server")
 parser.add_argument('--recentFaceTimeout', type=int,
@@ -114,7 +110,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             (self.people, self.svm) = self.getPreTrainedModel("db_svm.pkl")
 
         self.unknowns = {}
-        print("apiURL = " + args.apiURL)
 
         if args.unknown:
             self.unknownImgs = np.load("./examples/web/unknown.npy")
@@ -304,20 +299,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         return foundSimilarFace
 
     def newFaceIdentity(self, rep, phash=None, content=None):
-        identity = len(self.unknowns)
-        name = "User " + str(identity)
-
-        newFace = Face(rep, identity, phash, content, name)
-        self.unknowns[identity] = newFace
-        self.images[phash] = newFace
-        msg = {
-            "type": "NEW_IMAGE",
-            "hash": phash,
-            "content": content,
-            "identity": identity,
-            "representation": rep.tolist()
-        }
-        self.sendMessage(json.dumps(msg))
+        newFace = Face(rep, None, phash, content, "")
+        self.unknowns[phash] = newFace
         return newFace
 
     def foundUser(self, robotId, videoId, face):
@@ -334,42 +317,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             "name": face.name
         }
         self.sendMessage(json.dumps(msg))
-
-    def sendToAPI(self, msg):
-        url = args.apiURL
-        params = json.dumps(msg).encode('utf8')
-        headers = {"Content-type": "application/json"}
-        conn = httplib.HTTPSConnection(
-            url, timeout=5, context=ssl._create_unverified_context())
-        conn.request("POST", "/face_images", params, headers)
-        response = conn.getresponse()
-        print response.status, response.reason
-        conn.close()
-
-    def getFacesFromAPI(self):
-        url = args.apiURL
-        conn = httplib.HTTPSConnection(
-            url, timeout=5, context=ssl._create_unverified_context())
-        conn.request("GET", "/face_images?limit=10")
-        response = conn.getresponse()
-        print response.status, response.reason
-        data = response.read()
-
-        print(data)
-        results = json.loads(data)
-        dbFaces = results["results"]
-        conn.close()
-        print("results -{}".format(results))
-
-    def getPeopleFromAPI(self, msg):
-        url = args.apiURL
-        params = json.dumps(msg).encode('utf8')
-        conn = httplib.HTTPSConnection(
-            url, timeout=5, context=ssl._create_unverified_context())
-        conn.request("GET", "/people")
-        response = conn.getresponse()
-        print response.status, response.reason
-        conn.close()
 
     def processFrame(self, msg):
         start = time.time()
