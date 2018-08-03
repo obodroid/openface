@@ -45,7 +45,7 @@ import numpy as np
 import StringIO
 import base64
 import time
-import datetime
+from datetime import datetime
 import ssl
 import scipy.misc
 
@@ -79,6 +79,7 @@ parser.add_argument('--networkModel', type=str, help="Path to Torch network mode
 parser.add_argument('--imgDim', type=int,
                     help="Default image dimension.", default=96)
 parser.add_argument('--cuda', action='store_true')
+parser.add_argument('--verbose', action='store_true')
 parser.add_argument('--unknown', type=bool, default=False,
                     help='Try to predict unknown people')
 parser.add_argument('--port', type=int, default=9000,
@@ -267,13 +268,13 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                  'gamma': [0.001, 0.0001],
                  'kernel': ['rbf']}
             ]
-            self.svm = GridSearchCV(SVC(C=1,probability=True,decision_function_shape='ovr'), param_grid, cv=5).fit(X, y)
+            self.svm = GridSearchCV(SVC(C=1, probability=True), param_grid, cv=5).fit(X, y)
 
     def hasFoundSimilarFace(self, rep):
         foundSimilarFace = False
 
         for recentFace in self.recentFaces:
-            timeDiff = datetime.datetime.now() - recentFace['time']
+            timeDiff = datetime.now() - recentFace['time']
 
             if timeDiff.total_seconds() > args.recentFaceTimeout:
                 self.recentFaces.remove(recentFace)
@@ -281,7 +282,9 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
             d = rep - recentFace['rep']
             drep = np.dot(d, d)
-            print("Squared l2 distance between representations: {:0.3f}".format(drep))
+
+            if args.verbose:
+                print("Squared l2 distance between representations: {:0.3f}".format(drep))
             
             if drep < args.dth:
                 print("similar face found")
@@ -291,7 +294,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         if not foundSimilarFace:
             self.recentFaces.append({
                 'rep': rep,
-                'time': datetime.datetime.now()
+                'time': datetime.now()
             })
 
         return foundSimilarFace
@@ -313,7 +316,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         self.sendMessage(json.dumps(msg))
         return newFace
 
-    def foundUser(self,robotId,videoId,face):
+    def foundUser(self, robotId, videoId, face):
+        print("found user id: {}".format(face.identity))
         msg = {
             "type": "FOUND_USER",
             "robotId":robotId,
@@ -322,7 +326,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             "content": face.content,
             "predict_face_id": face.identity,
             "rep": face.rep.tolist(),
-            "time": datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'),
+            "time": datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'),
             "name": face.name
         }
         self.sendMessage(json.dumps(msg))
@@ -361,6 +365,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         conn.close()
 
     def processFrame(self, msg):
+        start = time.time()
         dataURL= msg['dataURL']
         identity = msg['identity']
         identities = []
@@ -391,77 +396,93 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         rgbFrame[:, :, 2] = buf[:, :, 0]
 
         annotatedFrame = np.copy(buf)
+
+        if args.verbose:
+            print("Create annotated frame at {} seconds.".format(time.time() - start))
+
         bb = align.getLargestFaceBoundingBox(rgbFrame)
         bbs = [bb] if bb is not None else []
+
+        if args.verbose:
+            print("Get face bounding box at {} seconds.".format(time.time() - start))
 
         for bb in bbs:
             print("bb = {}".format(bb))
             print("bb width = {}, height = {}".format(bb.width(),bb.height()))
 
             cropImage = rgbFrame[bb.top():bb.bottom(), bb.left():bb.right()]
-            print("crop image : {}".format(len(cropImage)))
+            landmarks = align.findLandmarks(rgbFrame, bb)
+            alignedFace = align.align(args.imgDim, rgbFrame, bb,
+                                    landmarks=landmarks,
+                                    landmarkIndices=openface.AlignDlib.OUTER_EYES_AND_NOSE)
+            if alignedFace is None:
+                continue
+
+            if args.verbose:
+                print("Align face at {} seconds.".format(time.time() - start))
             
-            if (len(cropImage) > 0) & (bb.left() > 0) & (bb.right() > 0) & (bb.top() > 0) & (bb.bottom() > 0) :
-                landmarks = align.findLandmarks(rgbFrame, bb)
-                alignedFace = align.align(args.imgDim, rgbFrame, bb,
-                                        landmarks=landmarks,
-                                        landmarkIndices=openface.AlignDlib.OUTER_EYES_AND_NOSE)
-                if alignedFace is None:
-                    continue
+            phash = str(imagehash.phash(Image.fromarray(alignedFace)))
+            
+            identity = -1
+            rep = net.forward(alignedFace)
+
+            if args.verbose:
+                print("Neural network forward pass at {} seconds.".format(time.time() - start))
+
+            cropImage = cropImage[:, :, ::-1].copy() # RGB to BGR for PIL image
+            cropPIL = scipy.misc.toimage(cropImage)
+            buf_crop = StringIO.StringIO()
+            cropPIL.save(buf_crop, format="PNG")
+            content = base64.b64encode(buf_crop.getvalue())
+            content= 'data:image/png;base64,' + content
+
+            if not self.hasFoundSimilarFace(rep) and self.svm:
+                predictions = self.svm.predict_proba(rep.reshape(1, -1)).ravel()
+                maxI = np.argmax(predictions)
+                person = self.people.inverse_transform(maxI)
+                confidence = predictions[maxI]
+                name = person.decode('utf-8')
+
+                if args.verbose:
+                    print("Prediction at {} seconds.".format(time.time() - start))
+
+                if confidence > 0.5:
+                    foundFace = Face(rep, maxI, phash, content, name)
+                else:
+                    foundFace = self.newFaceIdentity(rep, phash, content)
                 
-                phash = str(imagehash.phash(Image.fromarray(alignedFace)))
-                print("phash = " + phash)
-                
-                identity = -1
-                rep = net.forward(alignedFace)
-                cropImage = cropImage[:, :, ::-1].copy() # RGB to BGR for PIL image
-                cropPIL = scipy.misc.toimage(cropImage)
-                buf_crop = StringIO.StringIO()
-                cropPIL.save(buf_crop, format="PNG")
-                content = base64.b64encode(buf_crop.getvalue())
-                content= 'data:image/png;base64,' + content
+                identity = foundFace.identity
+                self.foundUser(robotId, videoId, foundFace)
+            else :
+                continue
 
-                if not self.hasFoundSimilarFace(rep) and self.svm:
-                    predictions = self.svm.predict_proba(rep.reshape(1, -1)).ravel()
-                    maxI = np.argmax(predictions)
-                    person = self.people.inverse_transform(maxI)
-                    confidence = predictions[maxI]
-                    name = person.decode('utf-8')
-                    if confidence > 0.5:
-                        foundFace = Face(rep, maxI, phash, content, name)
-                    else:
-                        foundFace = self.newFaceIdentity(rep, phash, content)
-                    
-                    identity = foundFace.identity
-                    self.foundUser(robotId, videoId, foundFace)
-                    print("found user id: {}".format(foundFace.identity))
-                else :
-                    continue
+            if identity not in identities:
+                identities.append(identity)
 
-                if identity not in identities:
-                    identities.append(identity)
+            msg = {
+                "type": "IDENTITIES",
+                "identities": identities
+            }
+            self.sendMessage(json.dumps(msg))
 
-                msg = {
-                    "type": "IDENTITIES",
-                    "identities": identities
-                }
-                self.sendMessage(json.dumps(msg))
+            plt.figure()
+            plt.imshow(annotatedFrame)
+            plt.xticks([])
+            plt.yticks([])
 
-                plt.figure()
-                plt.imshow(annotatedFrame)
-                plt.xticks([])
-                plt.yticks([])
+            imgdata = StringIO.StringIO()
+            plt.savefig(imgdata, format='png')
+            imgdata.seek(0)
+            content = 'data:image/png;base64,' + \
+                urllib.quote(base64.b64encode(imgdata.buf))
+            msg = {
+                "type": "ANNOTATED",
+                "content": content
+            }
+            plt.close()
 
-                imgdata = StringIO.StringIO()
-                plt.savefig(imgdata, format='png')
-                imgdata.seek(0)
-                content = 'data:image/png;base64,' + \
-                    urllib.quote(base64.b64encode(imgdata.buf))
-                msg = {
-                    "type": "ANNOTATED",
-                    "content": content
-                }
-                plt.close()
+        if args.verbose:
+            print("Process frame finished at {} seconds.".format(time.time() - start))
 
 def main(reactor):
     log.startLogging(sys.stdout)
