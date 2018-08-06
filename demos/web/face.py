@@ -17,15 +17,16 @@
 
 import json
 
+
 class Face:
 
-    def __init__(self, rep, identity,phash=None,content=None,name=None):
+    def __init__(self, rep, identity, phash=None, content=None, name=None):
         self.rep = rep
         self.identity = identity
         self.phash = phash
         self.content = content
         self.name = name
-    
+
     def convertToJson(self):
         jsonObj = json.dumps(self, default=lambda o: o.__dict__)
         print("jsonObj - {}".format(jsonObj))
@@ -40,5 +41,6 @@ class Face:
             self.name
         )
 
-def convertToFace(rep, identity,phash=None,content=None,name=None):
-        return Face(rep, identity,phash,content,name)
+
+def convertToFace(rep, identity, phash=None, content=None, name=None):
+    return Face(rep, identity, phash, content, name)

@@ -55,6 +55,7 @@ modelDir = os.path.join(fileDir, '..', '..', 'models')
 dlibModelDir = os.path.join(modelDir, 'dlib')
 openfaceModelDir = os.path.join(modelDir, 'openface')
 
+
 def getRep(imgPath, multiple=False):
     start = time.time()
     bgrImg = cv2.imread(imgPath)
@@ -92,7 +93,8 @@ def getRep(imgPath, multiple=False):
             raise Exception("Unable to align image: {}".format(imgPath))
         if args.verbose:
             print("Alignment took {} seconds.".format(time.time() - start))
-            print("This bbox is centered at {}, {}".format(bb.center().x, bb.center().y))
+            print("This bbox is centered at {}, {}".format(
+                bb.center().x, bb.center().y))
 
         start = time.time()
         rep = net.forward(alignedFace)
@@ -107,7 +109,9 @@ def getRep(imgPath, multiple=False):
 def train(args):
     print("Loading embeddings.")
     fname = "{}/labels.csv".format(args.workDir)
-    labels = pd.read_csv(fname, header=None).as_matrix()[:, 1]
+    label_file = pd.read_csv(fname, header=None).as_matrix()
+    label_ids = label_file[:, 0]
+    labels = label_file[:, 1]
 
     images = {}
     for label in labels:
@@ -120,13 +124,15 @@ def train(args):
                  map(os.path.split,
                      map(os.path.dirname, labels)))  # Get the directory.
 
-    fname = "{}/reps.csv".format(args.workDir)
-    embeddings = pd.read_csv(fname, header=None).as_matrix()
+    lei = LabelEncoder().fit(label_ids)
     le = LabelEncoder().fit(labels)
     labelsNum = le.transform(labels)
     print("labelsNum = {}".format(labelsNum))
     nClasses = len(le.classes_)
     print("Training for {} classes.".format(nClasses))
+
+    fname = "{}/reps.csv".format(args.workDir)
+    embeddings = pd.read_csv(fname, header=None).as_matrix()
 
     if args.classifier == 'LinearSvm':
         clf = SVC(C=1, kernel='linear', probability=True)
@@ -186,14 +192,15 @@ def train(args):
 
     fName = "{}/working_svm.pkl".format(args.workDir)
     print("Saving working_svm to '{}'".format(fName))
-    joblib.dump((le, clf), fName)
+    joblib.dump(((lei, le), clf), fName)
+
 
 def infer(args, multiple=False):
     with open(args.classifierModel, 'rb') as f:
         if sys.version_info[0] < 3:
-                (le, clf) = pickle.load(f)
+            (le, clf) = pickle.load(f)
         else:
-                (le, clf) = pickle.load(f, encoding='latin1')
+            (le, clf) = pickle.load(f, encoding='latin1')
 
     count = 0
     source = os.path.dirname(args.imgs[0])
@@ -223,14 +230,15 @@ def infer(args, multiple=False):
                 print("Prediction took {} seconds.".format(time.time() - start))
 
             if multiple:
-                print("Predict {} @ x={} with {:.2f} confidence.".format(name, bbx, confidence))
+                print("Predict {} @ x={} with {:.2f} confidence.".format(
+                    name, bbx, confidence))
             else:
                 print("Predict {} with {:.2f} confidence.".format(name, confidence))
 
             if isinstance(clf, GMM):
                 dist = np.linalg.norm(rep - clf.means_[maxI])
                 print("  + Distance from the mean: {}".format(dist))
-            
+
             classFolder = os.path.join(source, name)
             filename = str(count) + "-" + str(confidence) + ".jpg"
             destination = os.path.join(classFolder, filename)

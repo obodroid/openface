@@ -110,6 +110,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             (self.people, self.svm) = self.getPreTrainedModel("db_svm.pkl")
 
         self.unknowns = {}
+        self.faceId = 1
 
         if args.unknown:
             self.unknownImgs = np.load("./examples/web/unknown.npy")
@@ -136,6 +137,16 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             self.training = msg['val']
             if not self.training:
                 self.trainSVM()
+        elif msg['type'] == "REQUEST_SYNC_IDENTITY":
+            getPeople = lambda peopleId, name : {
+                'peopleId': peopleId,
+                'name': name
+            }
+            newMsg = {
+                "type": "SYNC_IDENTITY",
+                "people": map(getPeople, self.people[0].classes_, self.people[1].classes_)
+            }
+            self.sendMessage(json.dumps(newMsg))
         elif msg['type'] == "UPDATE_IDENTITY":
             h = msg['hash'].encode('ascii', 'ignore')
             if h in self.images:
@@ -298,31 +309,36 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
         return foundSimilarFace
 
-    def newFaceIdentity(self, rep, phash=None, content=None):
-        newFace = Face(rep, None, phash, content, "")
-        self.unknowns[phash] = newFace
-        return newFace
+    def createUnknownFace(self, rep, phash=None, content=None):
+        face = Face(rep, None, phash, content)
+        self.unknowns[phash] = face
+        return face
 
     def foundUser(self, robotId, videoId, face):
-        print("found user id: {}".format(face.identity))
+        print("found people id: {}".format(face.identity))
+
         msg = {
             "type": "FOUND_USER",
             "robotId": robotId,
             "videoId": videoId,
             "phash": face.phash,
             "content": face.content,
-            "predict_face_id": face.identity,
             "rep": face.rep.tolist(),
+            "predict_face_id": self.faceId,
             "time": datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'),
-            "name": face.name
         }
+
+        self.faceId += 1
+
+        if face.identity:
+            msg["name"] = face.name
+            msg["predict_people_id"] = face.identity
+
         self.sendMessage(json.dumps(msg))
 
     def processFrame(self, msg):
         start = time.time()
         dataURL = msg['dataURL']
-        identity = msg['identity']
-        identities = []
 
         if msg.has_key("robotId"):
             robotId = msg['robotId']
@@ -398,7 +414,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 predictions = self.svm.predict_proba(
                     rep.reshape(1, -1)).ravel()
                 maxI = np.argmax(predictions)
-                person = self.people.inverse_transform(maxI)
+                peopleId = self.people[0].inverse_transform(maxI)
+                person = self.people[1].inverse_transform(maxI)
                 confidence = predictions[maxI]
                 name = person.decode('utf-8')
 
@@ -406,23 +423,13 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     print("Prediction at {} seconds.".format(time.time() - start))
 
                 if confidence > 0.5:
-                    foundFace = Face(rep, maxI, phash, content, name)
+                    foundFace = Face(rep, peopleId, phash, content, name)
                 else:
-                    foundFace = self.newFaceIdentity(rep, phash, content)
+                    foundFace = self.createUnknownFace(rep, phash, content)
 
-                identity = foundFace.identity
                 self.foundUser(robotId, videoId, foundFace)
             else:
                 continue
-
-            if identity not in identities:
-                identities.append(identity)
-
-            msg = {
-                "type": "IDENTITIES",
-                "identities": identities
-            }
-            self.sendMessage(json.dumps(msg))
 
             plt.figure()
             plt.imshow(annotatedFrame)
