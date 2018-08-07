@@ -54,6 +54,7 @@ from datetime import datetime
 import ssl
 import scipy.misc
 
+from sklearn.preprocessing import LabelEncoder
 from sklearn.decomposition import PCA
 from sklearn.grid_search import GridSearchCV
 from sklearn.manifold import TSNE
@@ -85,12 +86,8 @@ parser.add_argument('--imgDim', type=int,
                     help="Default image dimension.", default=96)
 parser.add_argument('--cuda', action='store_true')
 parser.add_argument('--verbose', action='store_true')
-parser.add_argument('--unknown', type=bool, default=False,
-                    help='Try to predict unknown people')
 parser.add_argument('--port', type=int, default=9000,
                     help='WebSocket Port')
-parser.add_argument('--workingMode', type=str,
-                    help="Working mode - db_master, on_server", default="on_server")
 parser.add_argument('--recentFaceTimeout', type=int,
                     help="Recent face timeout", default=10)
 parser.add_argument('--dth', type=str,
@@ -110,16 +107,16 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         self.recentFaces = []
         self.training = True
 
-        if args.workingMode == "on_server":
-            (self.people, self.svm) = self.getPreTrainedModel("working_svm.pkl")
-        else:
-            (self.people, self.svm) = self.getPreTrainedModel("db_svm.pkl")
+        self.modelFile = "working_svm.pkl"
+        (self.people, self.svm) = self.getPreTrainedModel(self.modelFile)
 
         self.unknowns = {}
         self.faceId = 1
 
-        if args.unknown:
-            self.unknownImgs = np.load("./examples/web/unknown.npy")
+    def getPreTrainedModel(self, filename):
+        if os.path.isfile(filename):
+            return joblib.load(filename)
+        return ((LabelEncoder().fit([]), LabelEncoder().fit([])), None)
 
     def onConnect(self, request):
         print("Client connecting: {0}".format(request.peer))
@@ -143,8 +140,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             self.training = msg['val']
             if not self.training:
                 self.trainSVM()
-        elif msg['type'] == "REQUEST_SYNC_IDENTITY":
-            getPeople = lambda peopleId, name : {
+        elif msg['type'] == "REQ_SYNC_IDENTITY":
+            def getPeople(peopleId, name): return {
                 'peopleId': peopleId,
                 'name': name
             }
@@ -191,6 +188,11 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             self.images[h] = Face(np.array(jsImage['representation']),
                                   jsImage['identity'])
 
+        label_ids = [int(o['people_id']) for o in jsPeople]
+        labels = [str(o['name']) for o in jsPeople]
+        self.people = (LabelEncoder().fit(label_ids),
+                       LabelEncoder().fit(labels))
+
         if not training:
             self.trainSVM()
 
@@ -198,26 +200,17 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         X = []
         y = []
 
-        if len(self.images) < 5:
-            return None
-
         for img in self.images.values():
             X.append(img.rep)
-            y.append(img.identity)
+            y.append(self.people[0].transform([img.identity])[0])
 
         numIdentities = len(set(y + [-1])) - 1
-        if numIdentities == 0:
+        print("numIdentities = {}, numClasses = {}".format(
+            numIdentities, len(self.people[0].classes_)))
+        if numIdentities < len(self.people[0].classes_):
+            print("No image for {} classes".format(
+                len(self.people[0].classes_) - numIdentities))
             return None
-
-        if args.unknown:
-            numUnknown = y.count(-1)
-            numIdentified = len(y) - numUnknown
-            numUnknownAdd = (numIdentified / numIdentities) - numUnknown
-            if numUnknownAdd > 0:
-                print("+ Augmenting with {} unknown images.".format(numUnknownAdd))
-                for rep in self.unknownImgs[:numUnknownAdd]:
-                    X.append(rep)
-                    y.append(-1)
 
         X = np.vstack(X)
         y = np.array(y)
@@ -255,35 +248,19 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         }
         self.sendMessage(json.dumps(msg))
 
-    def getPreTrainedModel(self, filename, defaultValue=None):
-        if os.path.isfile(filename):
-            return joblib.load(filename)
-        else:
-            return defaultValue
-
     def trainSVM(self):
-        print("+ Training SVM on {} labeled images.".format(len(self.images)))
         d = self.getData()
         if d is None:
             self.svm = None
             return
         else:
             (X, y) = d
-            numIdentities = len(set(y + [-1]))
-            print("numIdentities = {}".format(numIdentities))
+            print("Training SVM on {} labeled images.".format(len(self.images)))
+            self.svm = SVC(C=1, kernel='rbf',
+                           probability=True, gamma=2).fit(X, y)
 
-            if numIdentities <= 1:
-                return
-
-            param_grid = [
-                {'C': [1, 10, 100, 1000],
-                 'kernel': ['linear']},
-                {'C': [1, 10, 100, 1000],
-                 'gamma': [0.001, 0.0001],
-                 'kernel': ['rbf']}
-            ]
-            self.svm = GridSearchCV(
-                SVC(C=1, probability=True), param_grid, cv=5).fit(X, y)
+            print("Saving working_svm to '{}'".format(self.modelFile))
+            joblib.dump((self.people, self.svm), self.modelFile)
 
     def hasFoundSimilarFace(self, rep):
         foundSimilarFace = False
@@ -337,7 +314,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         self.faceId += 1
 
         if face.identity:
-            msg["name"] = face.name
+            msg["predict_name"] = face.name
             msg["predict_people_id"] = face.identity
 
         self.sendMessage(json.dumps(msg))
@@ -416,20 +393,24 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             content = base64.b64encode(buf_crop.getvalue())
             content = 'data:image/png;base64,' + content
 
-            if not self.hasFoundSimilarFace(rep) and self.svm:
-                predictions = self.svm.predict_proba(
-                    rep.reshape(1, -1)).ravel()
-                maxI = np.argmax(predictions)
-                peopleId = self.people[0].inverse_transform(maxI)
-                person = self.people[1].inverse_transform(maxI)
-                confidence = predictions[maxI]
-                name = person.decode('utf-8')
+            if not self.hasFoundSimilarFace(rep):
+                if self.svm:
+                    predictions = self.svm.predict_proba(
+                        rep.reshape(1, -1)).ravel()
+                    maxI = np.argmax(predictions)
+                    peopleId = self.people[0].inverse_transform(maxI)
+                    person = self.people[1].inverse_transform(maxI)
+                    confidence = predictions[maxI]
+                    name = person.decode('utf-8')
 
-                if args.verbose:
-                    print("Prediction at {} seconds.".format(time.time() - start))
+                    if args.verbose:
+                        print("Prediction at {} seconds.".format(
+                            time.time() - start))
 
-                if confidence > 0.5:
-                    foundFace = Face(rep, peopleId, phash, content, name)
+                    if confidence > 0.5:
+                        foundFace = Face(rep, peopleId, phash, content, name)
+                    else:
+                        foundFace = self.createUnknownFace(rep, phash, content)
                 else:
                     foundFace = self.createUnknownFace(rep, phash, content)
 
