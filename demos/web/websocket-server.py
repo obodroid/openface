@@ -92,6 +92,8 @@ parser.add_argument('--recentFaceTimeout', type=int,
                     help="Recent face timeout", default=10)
 parser.add_argument('--dth', type=str,
                     help="Representation distance threshold", default=0.5)
+parser.add_argument('--minFaceResolution', type=int,
+                    help="Minimum face area resolution", default=100)
 
 args = parser.parse_args()
 
@@ -365,6 +367,9 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         for bb in bbs:
             print("bb = {}".format(bb))
             print("bb width = {}, height = {}".format(bb.width(), bb.height()))
+
+            if bb.width() < args.minFaceResolution or bb.height() < args.minFaceResolution:
+                continue
 
             cropImage = rgbFrame[bb.top():bb.bottom(), bb.left():bb.right()]
             landmarks = align.findLandmarks(rgbFrame, bb)
