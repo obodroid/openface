@@ -130,7 +130,7 @@ def train(args):
                  map(os.path.split,
                      map(os.path.dirname, labels)))  # Get the directory.
 
-    lei = LabelEncoder().fit(label_ids)
+    label_map = dict(zip(label_ids, labels))
     le = LabelEncoder().fit(labels)
     labelsNum = le.transform(labels)
     print("labelsNum = {}".format(labelsNum))
@@ -198,7 +198,7 @@ def train(args):
 
     fName = "{}/working_svm.pkl".format(args.workDir)
     print("Saving working_svm to '{}'".format(fName))
-    joblib.dump(((lei, le), clf), fName)
+    joblib.dump((label_map, clf), fName)
 
 
 def infer(args, multiple=False):

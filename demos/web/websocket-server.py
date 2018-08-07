@@ -109,6 +109,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
         self.modelFile = "working_svm.pkl"
         (self.people, self.svm) = self.getPreTrainedModel(self.modelFile)
+        self.le = LabelEncoder().fit(self.people.keys())
 
         self.unknowns = {}
         self.faceId = 1
@@ -116,7 +117,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
     def getPreTrainedModel(self, filename):
         if os.path.isfile(filename):
             return joblib.load(filename)
-        return ((LabelEncoder().fit([]), LabelEncoder().fit([])), None)
+        return (dict(), None)
 
     def onConnect(self, request):
         print("Client connecting: {0}".format(request.peer))
@@ -147,7 +148,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             }
             newMsg = {
                 "type": "SYNC_IDENTITY",
-                "people": map(getPeople, self.people[0].classes_, self.people[1].classes_)
+                "people": map(getPeople, self.people.keys(), self.people.values())
             }
             self.sendMessage(json.dumps(newMsg))
         elif msg['type'] == "UPDATE_IDENTITY":
@@ -190,8 +191,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
         label_ids = [int(o['people_id']) for o in jsPeople]
         labels = [str(o['name']) for o in jsPeople]
-        self.people = (LabelEncoder().fit(label_ids),
-                       LabelEncoder().fit(labels))
+        self.people = dict(zip(label_ids, labels))
+        self.le = LabelEncoder().fit(self.people.keys())
 
         if not training:
             self.trainSVM()
@@ -202,14 +203,14 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
         for img in self.images.values():
             X.append(img.rep)
-            y.append(self.people[0].transform([img.identity])[0])
+            y.append(self.le.transform([img.identity])[0])
 
         numIdentities = len(set(y + [-1])) - 1
         print("numIdentities = {}, numClasses = {}".format(
-            numIdentities, len(self.people[0].classes_)))
-        if numIdentities < len(self.people[0].classes_):
+            numIdentities, len(self.people)))
+        if numIdentities < len(self.people):
             print("No image for {} classes".format(
-                len(self.people[0].classes_) - numIdentities))
+                len(self.people) - numIdentities))
             return None
 
         X = np.vstack(X)
@@ -398,10 +399,10 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     predictions = self.svm.predict_proba(
                         rep.reshape(1, -1)).ravel()
                     maxI = np.argmax(predictions)
-                    peopleId = self.people[0].inverse_transform(maxI)
-                    person = self.people[1].inverse_transform(maxI)
-                    confidence = predictions[maxI]
+                    peopleId = self.le.inverse_transform(maxI)
+                    person = self.people[peopleId]
                     name = person.decode('utf-8')
+                    confidence = predictions[maxI]
 
                     if args.verbose:
                         print("Prediction at {} seconds.".format(
