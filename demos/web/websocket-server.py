@@ -107,6 +107,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         super(OpenFaceServerProtocol, self).__init__()
         self.images = {}
         self.recentFaces = []
+        self.processRecentFace = False
         self.training = True
 
         self.modelFile = "working_svm.pkl"
@@ -139,6 +140,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         elif msg['type'] == "FRAME":
             self.processFrame(msg)
             self.sendMessage('{"type": "PROCESSED"}')
+        elif msg['type'] == "PROCESS_RECENT_FACE":
+            self.processRecentFace = msg['val']
         elif msg['type'] == "TRAINING":
             self.training = msg['val']
             if not self.training:
@@ -400,7 +403,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 content = base64.b64encode(buf_crop.getvalue())
                 content = 'data:image/png;base64,' + content
 
-                if not self.hasFoundSimilarFace(rep):
+                if not self.hasFoundSimilarFace(rep) or self.processRecentFace:
                     if self.svm:
                         predictions = self.svm.predict_proba(
                             rep.reshape(1, -1)).ravel()
