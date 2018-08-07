@@ -17,6 +17,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import ptvsd
+
+# Allow other computers to attach to ptvsd at this IP address and port, using the secret
+# ptvsd.enable_attach("my_secret", address=('0.0.0.0', 3000))
+# Pause the program until a remote debugger is attached
+# ptvsd.wait_for_attach()
 
 import time
 
