@@ -323,126 +323,131 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         self.sendMessage(json.dumps(msg))
 
     def processFrame(self, msg):
-        start = time.time()
-        dataURL = msg['dataURL']
+        try:
+            start = time.time()
+            dataURL = msg['dataURL']
 
-        if msg.has_key("robotId"):
-            robotId = msg['robotId']
-        else:
-            robotId = ""
+            if msg.has_key("robotId"):
+                robotId = msg['robotId']
+            else:
+                robotId = ""
 
-        if msg.has_key("videoId"):
-            videoId = msg['videoId']
-        else:
-            videoId = ""
+            if msg.has_key("videoId"):
+                videoId = msg['videoId']
+            else:
+                videoId = ""
 
-        head = "data:image/jpeg;base64,"
-        assert(dataURL.startswith(head))
-        imgdata = base64.b64decode(dataURL[len(head):])
-        imgF = StringIO.StringIO()
-        imgF.write(imgdata)
-        imgF.seek(0)
-        img = Image.open(imgF)
+            head = "data:image/jpeg;base64,"
+            assert(dataURL.startswith(head))
+            imgdata = base64.b64decode(dataURL[len(head):])
+            imgF = StringIO.StringIO()
+            imgF.write(imgdata)
+            imgF.seek(0)
+            img = Image.open(imgF)
 
-        buf = np.fliplr(np.asarray(img))
+            buf = np.asarray(img)
 
-        rgbFrame = np.zeros((img.height, img.width, 3), dtype=np.uint8)
-        rgbFrame[:, :, 0] = buf[:, :, 2]
-        rgbFrame[:, :, 1] = buf[:, :, 1]
-        rgbFrame[:, :, 2] = buf[:, :, 0]
+            rgbFrame = np.zeros((img.height, img.width, 3), dtype=np.uint8)
+            rgbFrame[:, :, 0] = buf[:, :, 2]
+            rgbFrame[:, :, 1] = buf[:, :, 1]
+            rgbFrame[:, :, 2] = buf[:, :, 0]
 
-        annotatedFrame = np.copy(buf)
-
-        if args.verbose:
-            print("Create annotated frame at {} seconds.".format(
-                time.time() - start))
-
-        bb = align.getLargestFaceBoundingBox(rgbFrame)
-        bbs = [bb] if bb is not None else []
-
-        if args.verbose:
-            print("Get face bounding box at {} seconds.".format(
-                time.time() - start))
-
-        for bb in bbs:
-            print("bb = {}".format(bb))
-            print("bb width = {}, height = {}".format(bb.width(), bb.height()))
-
-            if bb.width() < args.minFaceResolution or bb.height() < args.minFaceResolution:
-                continue
-
-            cropImage = rgbFrame[bb.top():bb.bottom(), bb.left():bb.right()]
-            landmarks = align.findLandmarks(rgbFrame, bb)
-            alignedFace = align.align(args.imgDim, rgbFrame, bb,
-                                      landmarks=landmarks,
-                                      landmarkIndices=openface.AlignDlib.OUTER_EYES_AND_NOSE)
-            if alignedFace is None:
-                continue
+            annotatedFrame = np.copy(buf)
 
             if args.verbose:
-                print("Align face at {} seconds.".format(time.time() - start))
-
-            phash = str(imagehash.phash(Image.fromarray(alignedFace)))
-
-            identity = -1
-            rep = net.forward(alignedFace)
-
-            if args.verbose:
-                print("Neural network forward pass at {} seconds.".format(
+                print("Create annotated frame at {} seconds.".format(
                     time.time() - start))
 
-            # RGB to BGR for PIL image
-            cropImage = cropImage[:, :, ::-1].copy()
-            cropPIL = scipy.misc.toimage(cropImage)
-            buf_crop = StringIO.StringIO()
-            cropPIL.save(buf_crop, format="PNG")
-            content = base64.b64encode(buf_crop.getvalue())
-            content = 'data:image/png;base64,' + content
+            bb = align.getLargestFaceBoundingBox(rgbFrame)
+            bbs = [bb] if bb is not None else []
 
-            if not self.hasFoundSimilarFace(rep):
-                if self.svm:
-                    predictions = self.svm.predict_proba(
-                        rep.reshape(1, -1)).ravel()
-                    maxI = np.argmax(predictions)
-                    peopleId = self.le.inverse_transform(maxI)
-                    person = self.people[peopleId]
-                    name = person.decode('utf-8')
-                    confidence = predictions[maxI]
+            if args.verbose:
+                print("Get face bounding box at {} seconds.".format(
+                    time.time() - start))
 
-                    if args.verbose:
-                        print("Prediction at {} seconds.".format(
-                            time.time() - start))
+            for bb in bbs:
+                print("bb = {}".format(bb))
+                print("bb width = {}, height = {}".format(
+                    bb.width(), bb.height()))
 
-                    if confidence > 0.5:
-                        foundFace = Face(rep, peopleId, phash, content, name)
+                if bb.width() < args.minFaceResolution or bb.height() < args.minFaceResolution:
+                    continue
+
+                cropImage = rgbFrame[bb.top():bb.bottom(),
+                                     bb.left():bb.right()]
+                landmarks = align.findLandmarks(rgbFrame, bb)
+                alignedFace = align.align(args.imgDim, rgbFrame, bb,
+                                          landmarks=landmarks,
+                                          landmarkIndices=openface.AlignDlib.OUTER_EYES_AND_NOSE)
+                if alignedFace is None:
+                    continue
+
+                if args.verbose:
+                    print("Align face at {} seconds.".format(time.time() - start))
+
+                phash = str(imagehash.phash(Image.fromarray(alignedFace)))
+                rep = net.forward(alignedFace)
+
+                if args.verbose:
+                    print("Neural network forward pass at {} seconds.".format(
+                        time.time() - start))
+
+                # RGB to BGR for PIL image
+                cropImage = cropImage[:, :, ::-1].copy()
+                cropPIL = scipy.misc.toimage(cropImage)
+                buf_crop = StringIO.StringIO()
+                cropPIL.save(buf_crop, format="PNG")
+                content = base64.b64encode(buf_crop.getvalue())
+                content = 'data:image/png;base64,' + content
+
+                if not self.hasFoundSimilarFace(rep):
+                    if self.svm:
+                        predictions = self.svm.predict_proba(
+                            rep.reshape(1, -1)).ravel()
+                        maxI = np.argmax(predictions)
+                        peopleId = self.le.inverse_transform(maxI)
+                        person = self.people[peopleId]
+                        name = person.decode('utf-8')
+                        confidence = predictions[maxI]
+
+                        if args.verbose:
+                            print("Prediction at {} seconds.".format(
+                                time.time() - start))
+
+                        if confidence > 0.5:
+                            foundFace = Face(
+                                rep, peopleId, phash, content, name)
+                        else:
+                            foundFace = self.createUnknownFace(
+                                rep, phash, content)
                     else:
                         foundFace = self.createUnknownFace(rep, phash, content)
+
+                    self.foundUser(robotId, videoId, foundFace)
                 else:
-                    foundFace = self.createUnknownFace(rep, phash, content)
+                    continue
 
-                self.foundUser(robotId, videoId, foundFace)
-            else:
-                continue
+                plt.figure()
+                plt.imshow(annotatedFrame)
+                plt.xticks([])
+                plt.yticks([])
 
-            plt.figure()
-            plt.imshow(annotatedFrame)
-            plt.xticks([])
-            plt.yticks([])
+                imgdata = StringIO.StringIO()
+                plt.savefig(imgdata, format='png')
+                imgdata.seek(0)
+                content = 'data:image/png;base64,' + \
+                    urllib.quote(base64.b64encode(imgdata.buf))
+                msg = {
+                    "type": "ANNOTATED",
+                    "content": content
+                }
+                plt.close()
 
-            imgdata = StringIO.StringIO()
-            plt.savefig(imgdata, format='png')
-            imgdata.seek(0)
-            content = 'data:image/png;base64,' + \
-                urllib.quote(base64.b64encode(imgdata.buf))
-            msg = {
-                "type": "ANNOTATED",
-                "content": content
-            }
-            plt.close()
-
-        if args.verbose:
-            print("Process frame finished at {} seconds.".format(
-                time.time() - start))
+            if args.verbose:
+                print("Process frame finished at {} seconds.".format(
+                    time.time() - start))
+        except Exception:
+            pass
 
 
 def main(reactor):
