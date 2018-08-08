@@ -25,6 +25,7 @@ import os
 import sys
 fileDir = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(os.path.join(fileDir, "..", ".."))
+import traceback
 
 import pickle
 import pymongo
@@ -107,6 +108,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         super(OpenFaceServerProtocol, self).__init__()
         self.images = {}
         self.recentFaces = []
+        self.recentPeople = {}
         self.processRecentFace = False
         self.training = True
 
@@ -416,6 +418,20 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                                 time.time() - start))
 
                         if confidence > 0.5:
+                            if peopleId in self.recentPeople:
+                                timeDiff = datetime.now() - \
+                                    self.recentPeople[peopleId]['time']
+
+                                if timeDiff.total_seconds() > args.recentFaceTimeout:
+                                    del self.recentPeople[peopleId]
+                                else:
+                                    faceId = self.recentPeople[peopleId]['faceId']
+
+                            self.recentPeople[peopleId] = {
+                                'faceId': faceId,
+                                'time': datetime.now()
+                            }
+
                             foundFace = Face(
                                 rep, peopleId, faceId, phash, content, name)
                         else:
@@ -448,8 +464,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             if args.verbose:
                 print("Process frame finished at {} seconds.".format(
                     time.time() - start))
-        except Exception:
-            pass
+        except:
+            print(traceback.format_exc())
 
 
 def main(reactor):
