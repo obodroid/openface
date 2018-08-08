@@ -36,7 +36,6 @@ import sys
 import shutil
 import dill
 import json
-from face import Face
 
 from operator import itemgetter
 

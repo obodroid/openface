@@ -268,8 +268,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             print("Saving working_svm to '{}'".format(self.modelFile))
             joblib.dump((self.people, self.svm), self.modelFile)
 
-    def hasFoundSimilarFace(self, rep):
-        foundSimilarFace = False
+    def getRecentFace(self, rep):
+        recentFaceId = None
 
         for recentFace in self.recentFaces:
             timeDiff = datetime.now() - recentFace['time']
@@ -286,20 +286,21 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     "Squared l2 distance between representations: {:0.3f}".format(drep))
 
             if drep < args.dth:
-                print("similar face found")
-                foundSimilarFace = True
+                print("recent face found")
+                recentFaceId = recentFace['faceId']
                 break
 
-        if not foundSimilarFace:
+        if recentFaceId is None:
             self.recentFaces.append({
+                'faceId': self.faceId,
                 'rep': rep,
                 'time': datetime.now()
             })
 
-        return foundSimilarFace
+        return recentFaceId
 
-    def createUnknownFace(self, rep, phash=None, content=None):
-        face = Face(rep, None, phash, content)
+    def createUnknownFace(self, rep, cluster, phash=None, content=None):
+        face = Face(rep, None, cluster, phash, content)
         self.unknowns[phash] = face
         return face
 
@@ -313,11 +314,12 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             "phash": face.phash,
             "content": face.content,
             "rep": face.rep.tolist(),
-            "predict_face_id": self.faceId,
+            "predict_face_id": face.cluster,
             "time": datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'),
         }
 
-        self.faceId += 1
+        if face.cluster == self.faceId:
+            self.faceId += 1
 
         if face.identity:
             msg["predict_name"] = face.name
@@ -403,7 +405,9 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 content = base64.b64encode(buf_crop.getvalue())
                 content = 'data:image/png;base64,' + content
 
-                if not self.hasFoundSimilarFace(rep) or self.processRecentFace:
+                recentFaceId = self.getRecentFace(rep)
+                if recentFaceId is None or self.processRecentFace:
+                    faceId = recentFaceId if recentFaceId is not None else self.faceId
                     if self.svm:
                         predictions = self.svm.predict_proba(
                             rep.reshape(1, -1)).ravel()
@@ -419,12 +423,13 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
                         if confidence > 0.5:
                             foundFace = Face(
-                                rep, peopleId, phash, content, name)
+                                rep, peopleId, faceId, phash, content, name)
                         else:
                             foundFace = self.createUnknownFace(
-                                rep, phash, content)
+                                rep, faceId, phash, content)
                     else:
-                        foundFace = self.createUnknownFace(rep, phash, content)
+                        foundFace = self.createUnknownFace(
+                            rep, faceId, phash, content)
 
                     self.foundUser(robotId, videoId, foundFace)
                 else:

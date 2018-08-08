@@ -20,9 +20,10 @@ import json
 
 class Face:
 
-    def __init__(self, rep, identity, phash=None, content=None, name=None):
+    def __init__(self, rep, identity, cluster=None, phash=None, content=None, name=None):
         self.rep = rep
         self.identity = identity
+        self.cluster = cluster
         self.phash = phash
         self.content = content
         self.name = name
@@ -33,14 +34,11 @@ class Face:
         return jsonObj
 
     def __repr__(self):
-        return "{{id: {}, rep[0:5]: {}, phash:{}, content:{}, name:{}}}".format(
+        return "{{id: {}, rep[0:5]: {}, cluster:{}, phash:{}, content:{}, name:{}}}".format(
             str(self.identity),
             self.rep[0:5],
+            str(self.cluster),
             self.phash,
             self.content,
             self.name
         )
-
-
-def convertToFace(rep, identity, phash=None, content=None, name=None):
-    return Face(rep, identity, phash, content, name)
