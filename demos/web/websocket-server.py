@@ -267,13 +267,13 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
     def getRecentFace(self, rep):
         recentFaceId = None
 
+        def isValid(face):
+            timeDiff = datetime.now() - face['time']
+            return timeDiff.total_seconds() < args.recentFaceTimeout
+
+        self.recentFaces = filter(isValid, self.recentFaces)
+
         for recentFace in self.recentFaces:
-            timeDiff = datetime.now() - recentFace['time']
-
-            if timeDiff.total_seconds() > args.recentFaceTimeout:
-                self.recentFaces.remove(recentFace)
-                continue
-
             d = rep - recentFace['rep']
             drep = np.dot(d, d)
 
