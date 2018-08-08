@@ -174,12 +174,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 print("Image not found.")
         elif msg['type'] == 'REQ_TSNE':
             self.sendTSNE(msg['people'])
-        elif msg['type'] == "ECHO":
-            newMsg = {
-                "type": "ResponseECHO",
-                "message": msg
-            }
-            self.sendMessage(json.dumps(newMsg))
         else:
             print("Warning: Unknown message type: {}".format(msg['type']))
 
