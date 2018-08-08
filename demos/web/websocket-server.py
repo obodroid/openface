@@ -92,7 +92,7 @@ parser.add_argument('--port', type=int, default=9000,
 parser.add_argument('--recentFaceTimeout', type=int,
                     help="Recent face timeout", default=10)
 parser.add_argument('--dth', type=str,
-                    help="Representation distance threshold", default=0.5)
+                    help="Representation distance threshold", default=0.3)
 parser.add_argument('--minFaceResolution', type=int,
                     help="Minimum face area resolution", default=100)
 
@@ -148,6 +148,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             self.training = msg['val']
             if not self.training:
                 self.trainSVM()
+        elif msg['type'] == 'SET_MAX_FACE_ID':
+            self.faceId = int(msg['val']) + 1
         elif msg['type'] == "REQ_SYNC_IDENTITY":
             def getPeople(peopleId, name): return {
                 'peopleId': peopleId,
