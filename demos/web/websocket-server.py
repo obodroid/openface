@@ -177,7 +177,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             else:
                 print("Image not found.")
         elif msg['type'] == 'REQ_TSNE':
-            self.sendTSNE(msg['people'])
+            self.sendTSNE(msg['people'] if 'people' in msg else self.people)
         else:
             print("Warning: Unknown message type: {}".format(msg['type']))
 
@@ -231,24 +231,15 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         tsne = TSNE(n_components=2, init='random', random_state=0)
         X_r = tsne.fit_transform(X_pca)
 
-        yVals = list(np.unique(y))
-        colors = cm.rainbow(np.linspace(0, 1, len(yVals)))
+        label_ids = self.le.inverse_transform(y)
 
-        plt.figure()
-        for c, i in zip(colors, yVals):
-            name = "Unknown" if i == -1 else people[i]
-            plt.scatter(X_r[y == i, 0], X_r[y == i, 1], c=c, label=name)
-            plt.legend()
-
-        imgdata = StringIO.StringIO()
-        plt.savefig(imgdata, format='png')
-        imgdata.seek(0)
-
-        content = 'data:image/png;base64,' + \
-                  urllib.quote(base64.b64encode(imgdata.buf))
+        def getDataPoint(labelId, value): return {
+            'labelId': labelId,
+            'value': value
+        }
         msg = {
             "type": "TSNE_DATA",
-            "content": content
+            "data": map(getDataPoint, label_ids, X_r.tolist())
         }
         self.sendMessage(json.dumps(msg))
 
@@ -265,6 +256,11 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
             print("Saving working_svm to '{}'".format(self.modelFile))
             joblib.dump((self.people, self.svm), self.modelFile)
+
+        msg = {
+            "type": "TRAINING_FINISHED"
+        }
+        self.sendMessage(json.dumps(msg))
 
     def getRecentFace(self, rep):
         recentFaceId = None
