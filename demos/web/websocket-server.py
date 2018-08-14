@@ -212,6 +212,11 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         numIdentities = len(set(y + [-1])) - 1
         print("numIdentities = {}, numClasses = {}".format(
             numIdentities, len(self.people)))
+
+        if len(self.people) < 2:
+            print("Number of classes must be at least 2")
+            return None
+
         if numIdentities < len(self.people):
             print("No image for {} classes".format(
                 len(self.people) - numIdentities))
