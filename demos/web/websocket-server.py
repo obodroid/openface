@@ -186,6 +186,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
     def loadState(self, jsImages, training, jsPeople):
         self.training = training
+        self.images = {}
 
         for jsImage in jsImages:
             h = jsImage['hash'].encode('ascii', 'ignore')
