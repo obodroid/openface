@@ -234,13 +234,14 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
         label_ids = self.le.inverse_transform(y)
 
-        def getDataPoint(labelId, value): return {
+        def getDataPoint(labelId, value, phash): return {
             'labelId': labelId,
-            'value': value
+            'value': value,
+            'phash': phash
         }
         msg = {
             "type": "TSNE_DATA",
-            "data": map(getDataPoint, label_ids, X_r.tolist())
+            "data": map(getDataPoint, label_ids, X_r.tolist(), self.images.keys())
         }
         self.sendMessage(json.dumps(msg))
 
