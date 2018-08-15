@@ -57,16 +57,16 @@ import scipy.misc
 
 from sklearn.preprocessing import LabelEncoder
 from sklearn.decomposition import PCA
-from sklearn.grid_search import GridSearchCV
 from sklearn.manifold import TSNE
 from sklearn.svm import SVC
 from sklearn.ensemble import IsolationForest
 from sklearn.externals import joblib
+from sklearn.model_selection import StratifiedShuffleSplit
+from sklearn.model_selection import GridSearchCV
 
-import matplotlib as mpl
-mpl.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
+from matplotlib.colors import Normalize
 
 import openface
 
@@ -101,6 +101,16 @@ args = parser.parse_args()
 align = openface.AlignDlib(args.dlibFacePredictor)
 net = openface.TorchNeuralNet(args.networkModel, imgDim=args.imgDim,
                               cuda=args.cuda)
+
+
+class MidpointNormalize(Normalize):
+    def __init__(self, vmin=None, vmax=None, midpoint=None, clip=False):
+        self.midpoint = midpoint
+        Normalize.__init__(self, vmin, vmax, clip)
+
+    def __call__(self, value, clip=None):
+        x, y = [self.vmin, self.midpoint, self.vmax], [0, 0.5, 1]
+        return np.ma.masked_array(np.interp(value, x, y))
 
 
 class OpenFaceServerProtocol(WebSocketServerProtocol):
@@ -234,11 +244,12 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             (X, y) = d
 
         nc = None if len(X) < 50 else 50
-        p_div = 7 # TODO : implement automatic perplexity selection algorithm
+        p_div = 7  # TODO : implement automatic perplexity selection algorithm
         p = len(X) / p_div if len(X) < 30 * p_div else 30
         p = 2 if p < 2 else p
         X_pca = PCA(n_components=nc).fit_transform(X, X)
-        tsne = TSNE(n_components=2, init='random', random_state=0, perplexity=p)
+        tsne = TSNE(n_components=2, init='random',
+                    random_state=0, perplexity=p)
         X_r = tsne.fit_transform(X_pca)
 
         label_ids = self.le.inverse_transform(y)
@@ -261,9 +272,27 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             return
         else:
             (X, y) = d
+
             print("Training SVM on {} labeled images.".format(len(self.images)))
-            self.svm = SVC(C=1, kernel='rbf',
-                           probability=True, gamma=2).fit(X, y)
+            C_range = np.logspace(-2, 10, 13)
+            gamma_range = np.logspace(-9, 3, 13)
+            param_grid = dict(gamma=gamma_range, C=C_range)
+            test_size = float(len(self.people)) / len(self.images) if len(
+                self.images) * 0.1 < len(self.people) else 0.1
+
+            cv = StratifiedShuffleSplit(
+                n_splits=3, test_size=test_size, random_state=0)
+            grid = GridSearchCV(SVC(kernel='rbf'),
+                                param_grid=param_grid, cv=cv)
+            grid.fit(X, y)
+            scores = grid.cv_results_['mean_test_score'].reshape(
+                len(C_range), len(gamma_range))
+
+            print("The best parameters are %s with a score of %0.2f"
+                  % (grid.best_params_, grid.best_score_))
+
+            self.svm = SVC(C=grid.best_params_['C'], kernel='rbf',
+                           probability=True, gamma=grid.best_params_['gamma']).fit(X, y)
 
             print("Saving working_svm to '{}'".format(self.modelFile))
             joblib.dump((self.people, self.svm), self.modelFile)
@@ -272,6 +301,22 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             "type": "TRAINING_FINISHED"
         }
         self.sendMessage(json.dumps(msg))
+
+        if args.verbose:
+            self.visualizeParamHeatMap(scores, C_range, gamma_range)
+
+    def visualizeParamHeatMap(self, scores, C_range, gamma_range):
+        plt.figure(figsize=(8, 6))
+        plt.subplots_adjust(left=.2, right=0.95, bottom=0.15, top=0.95)
+        plt.imshow(scores, interpolation='nearest', cmap=plt.cm.hot,
+                   norm=MidpointNormalize(vmin=0.2, midpoint=0.92))
+        plt.xlabel('gamma')
+        plt.ylabel('C')
+        plt.colorbar()
+        plt.xticks(np.arange(len(gamma_range)), gamma_range, rotation=45)
+        plt.yticks(np.arange(len(C_range)), C_range)
+        plt.title('Validation Accuracy')
+        plt.show()
 
     def getRecentFace(self, rep):
         recentFaceId = None
@@ -426,7 +471,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                             print("Prediction at {} seconds.".format(
                                 time.time() - start))
 
-                        print("Predict {} with confidence {}".format(name, confidence))
+                        print("Predict {} with confidence {}".format(
+                            name, confidence))
                         if confidence > 0.5:
                             if peopleId in self.recentPeople:
                                 timeDiff = datetime.now() - \
