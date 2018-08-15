@@ -29,7 +29,8 @@ openfaceModelDir = os.path.join(modelDir, 'openface')
 parser = argparse.ArgumentParser()
 
 parser.add_argument('imgs', type=str, nargs='+', help="Input images.")
-parser.add_argument('outputDir', type=str, help="Output directory of aligned images.")
+parser.add_argument('--outputDir', type=str, help="Output directory of rep image.",
+                    default=None)
 parser.add_argument('--dlibFacePredictor', type=str, help="Path to dlib's face predictor.",
                     default=os.path.join(dlibModelDir, "shape_predictor_68_face_landmarks.dat"))
 parser.add_argument('--networkModel', type=str, help="Path to Torch network model.",
@@ -114,5 +115,8 @@ for img in args.imgs:
     reps = repsAndBBs[0]
     bbs = repsAndBBs[1]
 
-outputPath = "{}.png".format(os.path.join(args.outputDir, 'reps'))
-plt.savefig(outputPath)
+if args.outputDir is None:
+    plt.show()
+else:
+    outputPath = "{}.png".format(os.path.join(args.outputDir, 'reps'))
+    plt.savefig(outputPath)
