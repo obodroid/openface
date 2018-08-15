@@ -233,8 +233,12 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         else:
             (X, y) = d
 
-        X_pca = PCA(n_components=50).fit_transform(X, X)
-        tsne = TSNE(n_components=2, init='random', random_state=0)
+        nc = None if len(X) < 50 else 50
+        p_div = 7 # TODO : implement automatic perplexity selection algorithm
+        p = len(X) / p_div if len(X) < 30 * p_div else 30
+        p = 2 if p < 2 else p
+        X_pca = PCA(n_components=nc).fit_transform(X, X)
+        tsne = TSNE(n_components=2, init='random', random_state=0, perplexity=p)
         X_r = tsne.fit_transform(X_pca)
 
         label_ids = self.le.inverse_transform(y)
@@ -422,6 +426,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                             print("Prediction at {} seconds.".format(
                                 time.time() - start))
 
+                        print("Predict {} with confidence {}".format(name, confidence))
                         if confidence > 0.5:
                             if peopleId in self.recentPeople:
                                 timeDiff = datetime.now() - \
