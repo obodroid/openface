@@ -363,10 +363,12 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             "videoId": videoId,
             "phash": face.phash,
             "content": face.content,
-            "rep": face.rep.tolist(),
-            "predict_face_id": face.cluster,
+            "rep": face.rep.tolist() if face.rep is not None else None,
             "time": datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'),
         }
+
+        if face.cluster:
+            msg["predict_face_id"] = face.cluster
 
         if face.cluster == self.faceId:
             self.faceId += 1
@@ -425,9 +427,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 print("bb width = {}, height = {}".format(
                     bb.width(), bb.height()))
 
-                if bb.width() < args.minFaceResolution or bb.height() < args.minFaceResolution:
-                    continue
-
                 cropImage = rgbFrame[bb.top():bb.bottom(),
                                      bb.left():bb.right()]
                 landmarks = align.findLandmarks(rgbFrame, bb)
@@ -441,12 +440,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     print("Align face at {} seconds.".format(time.time() - start))
 
                 phash = str(imagehash.phash(Image.fromarray(alignedFace)))
-                rep = net.forward(alignedFace)
-
-                if args.verbose:
-                    print("Neural network forward pass at {} seconds.".format(
-                        time.time() - start))
-
+                
                 # RGB to BGR for PIL image
                 cropImage = cropImage[:, :, ::-1].copy()
                 cropPIL = scipy.misc.toimage(cropImage)
@@ -454,6 +448,17 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 cropPIL.save(buf_crop, format="PNG")
                 content = base64.b64encode(buf_crop.getvalue())
                 content = 'data:image/png;base64,' + content
+
+                if bb.width() < args.minFaceResolution or bb.height() < args.minFaceResolution:
+                    foundFace = Face(None, None, None, phash, content)
+                    self.foundUser(robotId, videoId, foundFace)
+                    continue
+
+                rep = net.forward(alignedFace)
+
+                if args.verbose:
+                    print("Neural network forward pass at {} seconds.".format(
+                        time.time() - start))
 
                 recentFaceId = self.getRecentFace(rep)
                 if recentFaceId is None or self.processRecentFace:
