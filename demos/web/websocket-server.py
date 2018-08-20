@@ -120,6 +120,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         self.recentFaces = []
         self.recentPeople = {}
         self.processRecentFace = False
+        self.enableSVM = True
         self.training = True
 
         self.modelFile = "working_svm.pkl"
@@ -154,6 +155,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             self.sendMessage('{"type": "PROCESSED"}')
         elif msg['type'] == "PROCESS_RECENT_FACE":
             self.processRecentFace = msg['val']
+        elif msg['type'] == "ENABLE_SVM":
+            self.enableSVM = msg['val']
         elif msg['type'] == "TRAINING":
             self.training = msg['val']
             if not self.training:
@@ -376,6 +379,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         if face.identity:
             msg["predict_name"] = face.name
             msg["predict_people_id"] = face.identity
+        elif face.name:
+            msg["label"] = face.name
 
         self.sendMessage(json.dumps(msg))
 
@@ -440,7 +445,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     print("Align face at {} seconds.".format(time.time() - start))
 
                 phash = str(imagehash.phash(Image.fromarray(alignedFace)))
-                
+
                 # RGB to BGR for PIL image
                 cropImage = cropImage[:, :, ::-1].copy()
                 cropPIL = scipy.misc.toimage(cropImage)
@@ -463,7 +468,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 recentFaceId = self.getRecentFace(rep)
                 if recentFaceId is None or self.processRecentFace:
                     faceId = recentFaceId if recentFaceId is not None else self.faceId
-                    if self.svm:
+                    if self.svm and self.enableSVM:
                         predictions = self.svm.predict_proba(
                             rep.reshape(1, -1)).ravel()
                         maxI = np.argmax(predictions)
@@ -499,8 +504,12 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                             foundFace = self.createUnknownFace(
                                 rep, faceId, phash, content)
                     else:
-                        foundFace = self.createUnknownFace(
-                            rep, faceId, phash, content)
+                        if msg.has_key("label"):
+                            label = msg['label']
+                        else:
+                            label = None
+                        foundFace = Face(rep, None, faceId,
+                                         phash, content, label)
 
                     self.foundUser(robotId, videoId, foundFace)
                 else:
