@@ -23,6 +23,8 @@ evaluation/attic/*/*.pdf
 demos/web/bower_components
 demos/web/unknown*.npy
 
+models/dlib/*.dat
+
 models/openface/*.t7
 models/openface/*.pkl
 celeb-classifier*

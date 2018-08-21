@@ -22,14 +22,26 @@ if [ ! -f dlib/shape_predictor_68_face_landmarks.dat ]; then
   printf "\n\n====================================================\n"
   printf "Downloading dlib's public domain face landmarks model.\n"
   printf "Reference: https://github.com/davisking/dlib-models\n\n"
-  printf "This will incur about 60MB of network traffic for the compressed\n"
-  printf "models that will decompress to about 100MB on disk.\n"
   printf "====================================================\n\n"
   wget -nv \
        http://dlib.net/files/shape_predictor_68_face_landmarks.dat.bz2 \
        -O dlib/shape_predictor_68_face_landmarks.dat.bz2
   [ $? -eq 0 ] || die "+ Error in wget."
   bunzip2 dlib/shape_predictor_68_face_landmarks.dat.bz2
+  [ $? -eq 0 ] || die "+ Error using bunzip2."
+
+  wget -nv \
+       http://dlib.net/files/shape_predictor_5_face_landmarks.dat.bz2 \
+       -O dlib/shape_predictor_5_face_landmarks.dat.bz2
+  [ $? -eq 0 ] || die "+ Error in wget."
+  bunzip2 dlib/shape_predictor_5_face_landmarks.dat.bz2
+  [ $? -eq 0 ] || die "+ Error using bunzip2."
+
+  wget -nv \
+       http://dlib.net/files/dlib_face_recognition_resnet_model_v1.dat.bz2 \
+       -O dlib/dlib_face_recognition_resnet_model_v1.dat.bz2
+  [ $? -eq 0 ] || die "+ Error in wget."
+  bunzip2 dlib/dlib_face_recognition_resnet_model_v1.dat.bz2
   [ $? -eq 0 ] || die "+ Error using bunzip2."
 fi
 
@@ -39,7 +51,6 @@ if [ ! -f openface/nn4.small2.v1.t7 ]; then
   printf "Downloading OpenFace models, which are copyright\n"
   printf "Carnegie Mellon University and are licensed under\n"
   printf "the Apache 2.0 License.\n\n"
-  printf "This will incur about 100MB of network traffic for the models.\n"
   printf "====================================================\n\n"
 
   wget -nv \
@@ -91,6 +102,14 @@ set -e
 checkmd5 \
   dlib/shape_predictor_68_face_landmarks.dat \
   73fde5e05226548677a050913eed4e04
+
+checkmd5 \
+  dlib/shape_predictor_5_face_landmarks.dat \
+  79db4b6294389d5ec3923c422efad7ec
+
+checkmd5 \
+  dlib/dlib_face_recognition_resnet_model_v1.dat \
+  2316b25ae80acf4ad9b620b00071c423
 
 checkmd5 \
   openface/celeb-classifier.nn4.small2.v1.pkl \
