@@ -4,7 +4,13 @@ plots
 work*
 *reps
 
-data
+data/*
+data/input/*
+data/output/*
+!data/input/.gitkeep
+!data/output/.gitkeep
+!data/casia-facescrub/remove-lfw-names.py
+!data/ms-celeb-1m/extract.py
 !data/vgg/download-and-align.py
 !data/download-lfw-subset.sh
 

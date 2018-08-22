@@ -17,7 +17,7 @@
 import ptvsd
 
 # Allow other computers to attach to ptvsd at this IP address and port, using the secret
-# ptvsd.enable_attach("my_secret", address = ('0.0.0.0', 3000))
+# ptvsd.enable_attach("my_secret", address=('0.0.0.0', 3000))
 # Pause the program until a remote debugger is attached
 # ptvsd.wait_for_attach()
 
@@ -26,6 +26,7 @@ import sys
 fileDir = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(os.path.join(fileDir, "..", ".."))
 import traceback
+import dlib
 
 import pickle
 import pymongo
@@ -79,12 +80,14 @@ tls_crt = os.path.join(fileDir, 'tls', 'server.crt')
 tls_key = os.path.join(fileDir, 'tls', 'server.key')
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--dlibFacePredictor', type=str, help="Path to dlib's face predictor.",
-                    default=os.path.join(dlibModelDir, "shape_predictor_68_face_landmarks.dat"))
-parser.add_argument('--networkModel', type=str, help="Path to Torch network model.",
-                    default=os.path.join(openfaceModelDir, 'nn4.small2.v1.t7'))
+parser.add_argument('--facePredictor', type=str, help="Path to dlib's face predictor.",
+                    default=os.path.join(dlibModelDir, "shape_predictor_5_face_landmarks.dat"))
+parser.add_argument('--faceRecognitionModel', type=str, help="Path to dlib's face recognition model.",
+                    default=os.path.join(dlibModelDir, 'dlib_face_recognition_resnet_model_v1.dat'))
 parser.add_argument('--imgDim', type=int,
                     help="Default image dimension.", default=96)
+parser.add_argument('--imgPath', type=str, help="Path to images.",
+                    default=os.path.join(fileDir, '..', '..', 'data'))
 parser.add_argument('--cuda', action='store_true')
 parser.add_argument('--verbose', action='store_true')
 parser.add_argument('--port', type=int, default=9000,
@@ -97,10 +100,9 @@ parser.add_argument('--minFaceResolution', type=int,
                     help="Minimum face area resolution", default=100)
 
 args = parser.parse_args()
-
-align = openface.AlignDlib(args.dlibFacePredictor)
-net = openface.TorchNeuralNet(args.networkModel, imgDim=args.imgDim,
-                              cuda=args.cuda)
+detector = dlib.get_frontal_face_detector()
+sp = dlib.shape_predictor(args.facePredictor)
+fr_model = dlib.face_recognition_model_v1(args.faceRecognitionModel)
 
 
 class MidpointNormalize(Normalize):
@@ -251,8 +253,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         p = len(X) / p_div if len(X) < 30 * p_div else 30
         p = 2 if p < 2 else p
         X_pca = PCA(n_components=nc).fit_transform(X, X)
-        tsne = TSNE(n_components=2, init='random',
-                    random_state=0, perplexity=p)
+        tsne = TSNE(n_components=2, n_iter=2000, random_state=0, perplexity=p)
         X_r = tsne.fit_transform(X_pca)
 
         label_ids = self.le.inverse_transform(y)
@@ -401,65 +402,53 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
             head = "data:image/jpeg;base64,"
             assert(dataURL.startswith(head))
-            imgdata = base64.b64decode(dataURL[len(head):])
-            imgF = StringIO.StringIO()
-            imgF.write(imgdata)
-            imgF.seek(0)
-            img = Image.open(imgF)
-
-            buf = np.asarray(img)
-
-            rgbFrame = np.zeros((img.height, img.width, 3), dtype=np.uint8)
-            rgbFrame[:, :, 0] = buf[:, :, 2]
-            rgbFrame[:, :, 1] = buf[:, :, 1]
-            rgbFrame[:, :, 2] = buf[:, :, 0]
-
-            annotatedFrame = np.copy(buf)
+            imgData = base64.b64decode(dataURL[len(head):])
+            imgStr = StringIO.StringIO()
+            imgStr.write(imgData)
+            imgStr.seek(0)
+            imgPIL = Image.open(imgStr)
 
             if args.verbose:
-                print("Create annotated frame at {} seconds.".format(
-                    time.time() - start))
+                imgPIL.save(os.path.join(
+                    args.imgPath, 'input', '{}-{}_{}.png'.format(robotId, videoId, msg['keyframe'])))
 
-            bb = align.getLargestFaceBoundingBox(rgbFrame)
-            bbs = [bb] if bb is not None else []
+            img = np.asarray(imgPIL)
+            bbs = detector(img, 1)
+            print("Number of faces detected: {}".format(len(bbs)))
 
             if args.verbose:
                 print("Get face bounding box at {} seconds.".format(
                     time.time() - start))
 
-            for bb in bbs:
-                print("bb = {}".format(bb))
+            for index, bb in enumerate(bbs):
+                print("keyframe: {}, index: {}, bb = {}".format(
+                    msg['keyframe'], index, bb))
                 print("bb width = {}, height = {}".format(
                     bb.width(), bb.height()))
 
-                cropImage = rgbFrame[bb.top():bb.bottom(),
-                                     bb.left():bb.right()]
-                landmarks = align.findLandmarks(rgbFrame, bb)
-                alignedFace = align.align(args.imgDim, rgbFrame, bb,
-                                          landmarks=landmarks,
-                                          landmarkIndices=openface.AlignDlib.OUTER_EYES_AND_NOSE)
-                if alignedFace is None:
-                    continue
+                # Create base64 cropped image
+                cropImg = img[bb.top():bb.bottom(),
+                              bb.left():bb.right()]
+                cropImgPIL = scipy.misc.toimage(cropImg)
+                cropImgStr = StringIO.StringIO()
+                cropImgPIL.save(cropImgStr, format="PNG")
+                content = 'data:image/png;base64,' + \
+                    base64.b64encode(cropImgStr.getvalue())
+
+                phash = str(imagehash.phash(Image.fromarray(cropImg)))
 
                 if args.verbose:
-                    print("Align face at {} seconds.".format(time.time() - start))
-
-                phash = str(imagehash.phash(Image.fromarray(alignedFace)))
-
-                # RGB to BGR for PIL image
-                cropImage = cropImage[:, :, ::-1].copy()
-                cropPIL = scipy.misc.toimage(cropImage)
-                buf_crop = StringIO.StringIO()
-                cropPIL.save(buf_crop, format="PNG")
-                content = base64.b64encode(buf_crop.getvalue())
-                content = 'data:image/png;base64,' + content
+                    cropImgPIL.save(os.path.join(
+                        args.imgPath, 'output', '{}-{}_{}_{}.png'.format(robotId, videoId, msg['keyframe'], index + 1)))
 
                 if bb.width() < args.minFaceResolution or bb.height() < args.minFaceResolution:
                     foundFace = Face(None, None, None, phash, content)
                     self.foundUser(robotId, videoId, foundFace)
                     continue
 
-                rep = net.forward(alignedFace)
+                shape = sp(img, bb)
+                rep = np.array(
+                    fr_model.compute_face_descriptor(img, shape))
 
                 if args.verbose:
                     print("Neural network forward pass at {} seconds.".format(
@@ -514,22 +503,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     self.foundUser(robotId, videoId, foundFace)
                 else:
                     continue
-
-                plt.figure()
-                plt.imshow(annotatedFrame)
-                plt.xticks([])
-                plt.yticks([])
-
-                imgdata = StringIO.StringIO()
-                plt.savefig(imgdata, format='png')
-                imgdata.seek(0)
-                content = 'data:image/png;base64,' + \
-                    urllib.quote(base64.b64encode(imgdata.buf))
-                msg = {
-                    "type": "ANNOTATED",
-                    "content": content
-                }
-                plt.close()
 
             if args.verbose:
                 print("Process frame finished at {} seconds.".format(
