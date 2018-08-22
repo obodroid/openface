@@ -425,6 +425,9 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     msg['keyframe'], index, bb))
                 print("bb width = {}, height = {}".format(
                     bb.width(), bb.height()))
+                
+                if ((bb.left() < 0) | (bb.right() < 0) | (bb.top() < 0) | (bb.bottom() < 0)):
+                    continue
 
                 # Create base64 cropped image
                 cropImg = img[bb.top():bb.bottom(),
