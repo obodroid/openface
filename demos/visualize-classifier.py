@@ -42,6 +42,7 @@ from operator import itemgetter
 import numpy as np
 np.set_printoptions(precision=2)
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 from mpl_toolkits.mplot3d import Axes3D
 
 import openface
@@ -66,6 +67,8 @@ def infer(args):
 
     data = np.arange(-2, 2, 0.2)
     results = np.zeros(shape=(len(data), len(data)))
+    colors = np.empty((len(data), len(data)), dtype=object)
+    colormap = cm.rainbow(np.linspace(0, 1, len(le.classes_)))
 
     for indexI, valueI in enumerate(data):
         for indexJ, valueJ in enumerate(data):
@@ -87,6 +90,7 @@ def infer(args):
                 confidence = predictions[maxI]
                 name = person.decode('utf-8')
                 results[indexI, indexJ] = confidence
+                colors[indexI, indexJ] = colormap[maxI]
 
                 if args.verbose:
                     print("Prediction took {} seconds.".format(
@@ -101,12 +105,13 @@ def infer(args):
 
     _x, _y = np.meshgrid(data, data)
     x, y = _x.ravel(), _y.ravel()
+    colors = colors.ravel()
     top = results.ravel()
     bottom = np.zeros_like(top)
     width = depth = 0.2
     fig = plt.figure(figsize=(24, 9))
     axis = fig.add_subplot(121, projection='3d')
-    axis.bar3d(x, y, bottom, width, depth, top, shade=True)
+    axis.bar3d(x, y, bottom, width, depth, top, color=colors, shade=True)
     outputPath = "{}.png".format(os.path.join(args.outputDir, 'confidence'))
     plt.savefig(outputPath)
 
