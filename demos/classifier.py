@@ -56,7 +56,7 @@ from sklearn.naive_bayes import GaussianNB
 from sklearn.externals import joblib
 
 fileDir = os.path.dirname(os.path.realpath(__file__))
-modelDir = os.path.join(fileDir, '..', '..', 'models')
+modelDir = os.path.join(fileDir, '..', 'models')
 dlibModelDir = os.path.join(modelDir, 'dlib')
 openfaceModelDir = os.path.join(modelDir, 'openface')
 

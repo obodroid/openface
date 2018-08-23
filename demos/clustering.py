@@ -40,7 +40,7 @@ from sklearn.cluster import DBSCAN
 
 import openface
 
-modelDir = os.path.join(fileDir, '..', '..', 'models')
+modelDir = os.path.join(fileDir, '..', 'models')
 dlibModelDir = os.path.join(modelDir, 'dlib')
 openfaceModelDir = os.path.join(modelDir, 'openface')
 
