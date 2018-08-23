@@ -36,7 +36,6 @@ import sys
 import shutil
 import dill
 import json
-from face import Face
 
 from operator import itemgetter
 
@@ -240,10 +239,6 @@ def infer(args, multiple=False):
                     name, bbx, confidence))
             else:
                 print("Predict {} with {:.2f} confidence.".format(name, confidence))
-
-            if isinstance(clf, GMM):
-                dist = np.linalg.norm(rep - clf.means_[maxI])
-                print("  + Distance from the mean: {}".format(dist))
 
             classFolder = os.path.join(source, name)
             filename = str(count) + "-" + str(confidence) + ".jpg"
