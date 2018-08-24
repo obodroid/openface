@@ -60,6 +60,7 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 from sklearn.svm import SVC
+from sklearn.neighbors import RadiusNeighborsClassifier
 from sklearn.ensemble import IsolationForest
 from sklearn.externals import joblib
 from sklearn.model_selection import StratifiedShuffleSplit
@@ -98,6 +99,11 @@ parser.add_argument('--dth', type=str,
                     help="Representation distance threshold", default=0.3)
 parser.add_argument('--minFaceResolution', type=int,
                     help="Minimum face area resolution", default=100)
+parser.add_argument('--classifier', type=str,
+                    choices=['SVC',
+                             'RadiusNeighbors'],
+                    help='The type of classifier to use.',
+                    default='RadiusNeighbors')
 
 args = parser.parse_args()
 detector = dlib.get_frontal_face_detector()
@@ -253,7 +259,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         p = len(X) / p_div if len(X) < 30 * p_div else 30
         p = 2 if p < 2 else p
         X_pca = PCA(n_components=nc).fit_transform(X, X)
-        tsne = TSNE(n_components=2, n_iter=2000, random_state=0, perplexity=p)
+        tsne = TSNE(n_components=2, n_iter=3000, random_state=0, perplexity=p)
         X_r = tsne.fit_transform(X_pca)
 
         label_ids = self.le.inverse_transform(y)
@@ -279,25 +285,42 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
             print("Training Classifier on {} labeled images.".format(
                 len(self.images)))
-            C_range = np.logspace(-2, 10, 13)
-            gamma_range = np.logspace(-9, 3, 13)
-            param_grid = dict(gamma=gamma_range, C=C_range)
+
             test_size = float(len(self.people)) / len(self.images) if len(
                 self.images) * 0.1 < len(self.people) else 0.1
 
             cv = StratifiedShuffleSplit(
                 n_splits=3, test_size=test_size, random_state=0)
-            grid = GridSearchCV(SVC(kernel='rbf'),
-                                param_grid=param_grid, cv=cv)
-            grid.fit(X, y)
-            scores = grid.cv_results_['mean_test_score'].reshape(
-                len(C_range), len(gamma_range))
 
-            print("The best parameters are %s with a score of %0.2f"
-                  % (grid.best_params_, grid.best_score_))
+            if args.classifier == 'RadiusNeighbors':
+                radius_range = np.linspace(0.1, 1.5, num=15)
+                param_grid = dict(radius=radius_range)
+                grid = GridSearchCV(RadiusNeighborsClassifier(
+                    outlier_label=-1), param_grid=param_grid, cv=cv).fit(X, y)
 
-            self.classifier = SVC(C=grid.best_params_['C'], kernel='rbf',
-                                  probability=True, gamma=grid.best_params_['gamma']).fit(X, y)
+                scores = grid.cv_results_[
+                    'mean_test_score'].reshape(len(radius_range), 1)
+
+                print("The best parameters are %s with a score of %0.2f"
+                      % (grid.best_params_, grid.best_score_))
+
+                self.classifier = RadiusNeighborsClassifier(
+                    radius=grid.best_params_['radius'], outlier_label=-1).fit(X, y)
+
+            elif args.classifier == 'SVC':
+                C_range = np.logspace(-2, 7, 10)
+                gamma_range = np.logspace(-6, 3, 10)
+                param_grid = dict(gamma=gamma_range, C=C_range)
+                grid = GridSearchCV(SVC(kernel='rbf'),
+                                    param_grid=param_grid, cv=cv).fit(X, y)
+                scores = grid.cv_results_['mean_test_score'].reshape(
+                    len(C_range), len(gamma_range))
+
+                print("The best parameters are %s with a score of %0.2f"
+                      % (grid.best_params_, grid.best_score_))
+
+                self.classifier = SVC(C=grid.best_params_['C'], kernel='rbf',
+                                      probability=True, gamma=grid.best_params_['gamma']).fit(X, y)
 
             print("Saving working_svm to '{}'".format(self.modelFile))
             joblib.dump((self.people, self.classifier), self.modelFile)
@@ -308,18 +331,21 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         self.sendMessage(json.dumps(msg))
 
         if args.verbose:
-            self.visualizeParamHeatMap(scores, C_range, gamma_range)
+            if args.classifier == 'RadiusNeighbors':
+                self.visualizeParamHeatMap(scores, radius_range, [0])
+            elif args.classifier == 'SVC':
+                self.visualizeParamHeatMap(scores, C_range, gamma_range)
 
-    def visualizeParamHeatMap(self, scores, C_range, gamma_range):
+    def visualizeParamHeatMap(self, scores, param1, param2):
         plt.figure(figsize=(8, 6))
         plt.subplots_adjust(left=.2, right=0.95, bottom=0.15, top=0.95)
         plt.imshow(scores, interpolation='nearest', cmap=plt.cm.hot,
                    norm=MidpointNormalize(vmin=0.2, midpoint=0.92))
-        plt.xlabel('gamma')
-        plt.ylabel('C')
+        plt.xlabel('param2')
+        plt.ylabel('param1')
         plt.colorbar()
-        plt.xticks(np.arange(len(gamma_range)), gamma_range, rotation=45)
-        plt.yticks(np.arange(len(C_range)), C_range)
+        plt.xticks(np.arange(len(param2)), param2)
+        plt.yticks(np.arange(len(param1)), param1)
         plt.title('Validation Accuracy')
         plt.show()
 
@@ -390,12 +416,22 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         (peopleId, name, confidence) = (None, None, None)
 
         if self.classifier:
-            predictions = self.classifier.predict_proba(rep.reshape(1, -1)).ravel()
-            maxI = np.argmax(predictions)
-            peopleId = self.le.inverse_transform(maxI)
-            person = self.people[peopleId]
-            name = person.decode('utf-8')
-            confidence = predictions[maxI]
+            if isinstance(self.classifier, SVC):
+                predictions = self.classifier.predict_proba(
+                    rep.reshape(1, -1)).ravel()
+                predictIndex = np.argmax(predictions)
+                peopleId = self.le.inverse_transform(predictIndex)
+                person = self.people[peopleId]
+                name = person.decode('utf-8')
+                confidence = predictions[predictIndex]
+
+            elif isinstance(self.classifier, RadiusNeighborsClassifier):
+                predictIndex = self.classifier.predict(rep.reshape(1, -1))
+                if predictIndex >= 0:
+                    peopleId = self.le.inverse_transform(predictIndex)
+                    person = self.people[peopleId]
+                    name = person.decode('utf-8')
+                    confidence = 1.0
 
             print("Predict {} with confidence {}".format(name, confidence))
 
