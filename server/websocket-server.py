@@ -122,11 +122,11 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         self.recentFaces = []
         self.recentPeople = {}
         self.processRecentFace = False
-        self.enableSVM = True
+        self.enableClassifier = True
         self.training = True
 
         self.modelFile = "working_svm.pkl"
-        (self.people, self.svm) = self.getPreTrainedModel(self.modelFile)
+        (self.people, self.classifier) = self.getPreTrainedModel(self.modelFile)
         self.le = LabelEncoder().fit(self.people.keys())
 
         self.unknowns = {}
@@ -157,12 +157,12 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             self.sendMessage('{"type": "PROCESSED"}')
         elif msg['type'] == "PROCESS_RECENT_FACE":
             self.processRecentFace = msg['val']
-        elif msg['type'] == "ENABLE_SVM":
-            self.enableSVM = msg['val']
+        elif msg['type'] == "ENABLE_CLASSIFIER":
+            self.enableClassifier = msg['val']
         elif msg['type'] == "TRAINING":
             self.training = msg['val']
             if not self.training:
-                self.trainSVM()
+                self.trainClassifier()
         elif msg['type'] == 'SET_MAX_FACE_ID':
             self.faceId = int(msg['val']) + 1
         elif msg['type'] == "REQ_SYNC_IDENTITY":
@@ -180,7 +180,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             if h in self.images:
                 self.images[h].identity = msg['idx']
                 if not self.training:
-                    self.trainSVM()
+                    self.trainClassifier()
             else:
                 print("Image not found.")
         elif msg['type'] == "REMOVE_IMAGE":
@@ -188,7 +188,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             if h in self.images:
                 del self.images[h]
                 if not self.training:
-                    self.trainSVM()
+                    self.trainClassifier()
             else:
                 print("Image not found.")
         elif msg['type'] == 'REQ_TSNE':
@@ -214,7 +214,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         self.le = LabelEncoder().fit(self.people.keys())
 
         if not training:
-            self.trainSVM()
+            self.trainClassifier()
 
     def getData(self):
         X = []
@@ -269,15 +269,16 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         }
         self.sendMessage(json.dumps(msg))
 
-    def trainSVM(self):
+    def trainClassifier(self):
         d = self.getData()
         if d is None:
-            self.svm = None
+            self.classifier = None
             return
         else:
             (X, y) = d
 
-            print("Training SVM on {} labeled images.".format(len(self.images)))
+            print("Training Classifier on {} labeled images.".format(
+                len(self.images)))
             C_range = np.logspace(-2, 10, 13)
             gamma_range = np.logspace(-9, 3, 13)
             param_grid = dict(gamma=gamma_range, C=C_range)
@@ -295,11 +296,11 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             print("The best parameters are %s with a score of %0.2f"
                   % (grid.best_params_, grid.best_score_))
 
-            self.svm = SVC(C=grid.best_params_['C'], kernel='rbf',
-                           probability=True, gamma=grid.best_params_['gamma']).fit(X, y)
+            self.classifier = SVC(C=grid.best_params_['C'], kernel='rbf',
+                                  probability=True, gamma=grid.best_params_['gamma']).fit(X, y)
 
             print("Saving working_svm to '{}'".format(self.modelFile))
-            joblib.dump((self.people, self.svm), self.modelFile)
+            joblib.dump((self.people, self.classifier), self.modelFile)
 
         msg = {
             "type": "TRAINING_FINISHED"
@@ -385,6 +386,21 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
         self.sendMessage(json.dumps(msg))
 
+    def classifyFace(self, rep):
+        (peopleId, name, confidence) = (None, None, None)
+
+        if self.classifier:
+            predictions = self.classifier.predict_proba(rep.reshape(1, -1)).ravel()
+            maxI = np.argmax(predictions)
+            peopleId = self.le.inverse_transform(maxI)
+            person = self.people[peopleId]
+            name = person.decode('utf-8')
+            confidence = predictions[maxI]
+
+            print("Predict {} with confidence {}".format(name, confidence))
+
+        return (peopleId, name, confidence)
+
     def processFrame(self, msg):
         try:
             start = time.time()
@@ -425,7 +441,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     msg['keyframe'], index, bb))
                 print("bb width = {}, height = {}".format(
                     bb.width(), bb.height()))
-                
+
                 if ((bb.left() < 0) | (bb.right() < 0) | (bb.top() < 0) | (bb.bottom() < 0)):
                     continue
 
@@ -460,22 +476,14 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 recentFaceId = self.getRecentFace(rep)
                 if recentFaceId is None or self.processRecentFace:
                     faceId = recentFaceId if recentFaceId is not None else self.faceId
-                    if self.svm and self.enableSVM:
-                        predictions = self.svm.predict_proba(
-                            rep.reshape(1, -1)).ravel()
-                        maxI = np.argmax(predictions)
-                        peopleId = self.le.inverse_transform(maxI)
-                        person = self.people[peopleId]
-                        name = person.decode('utf-8')
-                        confidence = predictions[maxI]
+                    if self.enableClassifier:
+                        (peopleId, name, confidence) = self.classifyFace(rep)
 
                         if args.verbose:
                             print("Prediction at {} seconds.".format(
                                 time.time() - start))
 
-                        print("Predict {} with confidence {}".format(
-                            name, confidence))
-                        if confidence > 0.5:
+                        if confidence and confidence > 0.5:
                             if peopleId in self.recentPeople:
                                 timeDiff = datetime.now() - \
                                     self.recentPeople[peopleId]['time']
