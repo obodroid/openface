@@ -65,6 +65,7 @@ from sklearn.ensemble import IsolationForest
 from sklearn.externals import joblib
 from sklearn.model_selection import StratifiedShuffleSplit
 from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import train_test_split
 
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
@@ -134,6 +135,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         self.modelFile = "working_svm.pkl"
         (self.people, self.classifier) = self.getPreTrainedModel(self.modelFile)
         self.le = LabelEncoder().fit(self.people.keys())
+        self.calibrationSet = set()
 
         self.unknowns = {}
         self.faceId = 1
@@ -304,8 +306,18 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 print("The best parameters are %s with a score of %0.2f"
                       % (grid.best_params_, grid.best_score_))
 
+                X_train, X_calibration, y_train, y_calibration = train_test_split(
+                    X, y, test_size=test_size, random_state=0)
+
                 self.classifier = RadiusNeighborsClassifier(
-                    radius=grid.best_params_['radius'], outlier_label=-1).fit(X, y)
+                    radius=grid.best_params_['radius'], outlier_label=-1).fit(X_train, y_train)
+
+                neighbors = self.classifier.radius_neighbors(X_calibration, return_distance=False)
+                
+                for i, neighbor in enumerate(neighbors):
+                    X_neighbor = np.take(X_train, neighbor, axis=0)
+                    y_neighbor = np.full(X_neighbor.shape[0], y_calibration[i])
+                    self.calibrationSet.add(self.classifier.score(X_neighbor, y_neighbor) * X_neighbor.shape[0])
 
             elif args.classifier == 'SVC':
                 C_range = np.logspace(-2, 7, 10)
