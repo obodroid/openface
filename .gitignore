@@ -26,8 +26,7 @@ evaluation/*/
 evaluation/attic/*/*.csv
 evaluation/attic/*/*.pdf
 
-demos/web/bower_components
-demos/web/unknown*.npy
+server/bower_components
 
 models/dlib/*.dat
 

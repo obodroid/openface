@@ -41,8 +41,6 @@ WEBSOCKET_LOG='/tmp/openface.websocket.log'
 printf "WebSocket Server: Logging to '%s'\n\n" $WEBSOCKET_LOG
 
 python2 simpleSSLServer.py $HTTP_PORT &> /dev/null &
-
-cd ../../ # Root OpenFace directory.
-./demos/web/websocket-server.py --port $WEBSOCKET_PORT 2>&1 | tee $WEBSOCKET_LOG &
+./websocket-server.py --port $WEBSOCKET_PORT 2>&1 | tee $WEBSOCKET_LOG &
 
 wait

@@ -24,7 +24,7 @@ import ptvsd
 import os
 import sys
 fileDir = os.path.dirname(os.path.realpath(__file__))
-sys.path.append(os.path.join(fileDir, "..", ".."))
+sys.path.append(os.path.join(fileDir, ".."))
 import traceback
 import dlib
 
@@ -71,7 +71,7 @@ from matplotlib.colors import Normalize
 
 import openface
 
-modelDir = os.path.join(fileDir, '..', '..', 'models')
+modelDir = os.path.join(fileDir, '..', 'models')
 dlibModelDir = os.path.join(modelDir, 'dlib')
 openfaceModelDir = os.path.join(modelDir, 'openface')
 
@@ -87,7 +87,7 @@ parser.add_argument('--faceRecognitionModel', type=str, help="Path to dlib's fac
 parser.add_argument('--imgDim', type=int,
                     help="Default image dimension.", default=96)
 parser.add_argument('--imgPath', type=str, help="Path to images.",
-                    default=os.path.join(fileDir, '..', '..', 'data'))
+                    default=os.path.join(fileDir, '..', 'data'))
 parser.add_argument('--cuda', action='store_true')
 parser.add_argument('--verbose', action='store_true')
 parser.add_argument('--port', type=int, default=9000,
