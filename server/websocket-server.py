@@ -426,7 +426,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 confidence = predictions[predictIndex]
 
             elif isinstance(self.classifier, RadiusNeighborsClassifier):
-                predictIndex = self.classifier.predict(rep.reshape(1, -1))
+                predictIndex = self.classifier.predict(rep.reshape(1, -1))[0]
                 if predictIndex >= 0:
                     peopleId = self.le.inverse_transform(predictIndex)
                     person = self.people[peopleId]
