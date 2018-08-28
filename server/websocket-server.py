@@ -132,10 +132,13 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         self.enableClassifier = True
         self.training = True
 
-        self.modelFile = "working_svm.pkl"
+        self.modelFile = "working_classifier.pkl"
         (self.people, self.classifier) = self.getPreTrainedModel(self.modelFile)
+
+        self.datasetFile = "working_dataset.pkl"
+        (self.trainingData, self.calibrationSet) = self.getPreTrainedDataset(self.datasetFile)
+
         self.le = LabelEncoder().fit(self.people.keys())
-        self.calibrationSet = set()
 
         self.unknowns = {}
         self.faceId = 1
@@ -144,6 +147,11 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         if os.path.isfile(filename):
             return joblib.load(filename)
         return (dict(), None)
+
+    def getPreTrainedDataset(self, filename):
+        if os.path.isfile(filename):
+            return joblib.load(filename)
+        return ([], None)
 
     def onConnect(self, request):
         print("Client connecting: {0}".format(request.peer))
@@ -201,6 +209,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 print("Image not found.")
         elif msg['type'] == 'REQ_TSNE':
             self.sendTSNE(msg['people'] if 'people' in msg else self.people)
+        elif msg['type'] == 'CLASSIFY':
+            self.classifyFace(np.array(msg['rep']))
         else:
             print("Warning: Unknown message type: {}".format(msg['type']))
 
@@ -284,6 +294,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             return
         else:
             (X, y) = d
+            self.calibrationSet = []
 
             print("Training Classifier on {} labeled images.".format(
                 len(self.images)))
@@ -317,7 +328,9 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 for i, neighbor in enumerate(neighbors):
                     X_neighbor = np.take(X_train, neighbor, axis=0)
                     y_neighbor = np.full(X_neighbor.shape[0], y_calibration[i])
-                    self.calibrationSet.add(self.classifier.score(X_neighbor, y_neighbor) * X_neighbor.shape[0])
+                    self.calibrationSet.append(round((1 - self.classifier.score(X_neighbor, y_neighbor)) * X_neighbor.shape[0]))
+
+                self.trainingData = (X_train, y_train)
 
             elif args.classifier == 'SVC':
                 C_range = np.logspace(-2, 7, 10)
@@ -333,9 +346,14 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
                 self.classifier = SVC(C=grid.best_params_['C'], kernel='rbf',
                                       probability=True, gamma=grid.best_params_['gamma']).fit(X, y)
+                
+                self.trainingData = (X, y)
 
-            print("Saving working_svm to '{}'".format(self.modelFile))
+            print("Saving working classifier to '{}'".format(self.modelFile))
             joblib.dump((self.people, self.classifier), self.modelFile)
+
+            print("Saving working dataset to '{}'".format(self.datasetFile))
+            joblib.dump((self.trainingData, self.calibrationSet), self.datasetFile)
 
         msg = {
             "type": "TRAINING_FINISHED"
@@ -443,7 +461,12 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     peopleId = self.le.inverse_transform(predictIndex)
                     person = self.people[peopleId]
                     name = person.decode('utf-8')
-                    confidence = 1.0
+
+                    neighbor = self.classifier.radius_neighbors([rep], return_distance=False)[0]
+                    X_neighbor = np.take(self.trainingData[0], neighbor, axis=0)
+                    y_neighbor = np.full(X_neighbor.shape[0], predictIndex)
+                    nonconformity = (1 - self.classifier.score(X_neighbor, y_neighbor)) * X_neighbor.shape[0]
+                    confidence = sum(1.0 for c in self.calibrationSet if c >= nonconformity) / len(self.calibrationSet)
 
             print("Predict {} with confidence {}".format(name, confidence))
 
