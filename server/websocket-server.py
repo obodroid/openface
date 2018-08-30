@@ -82,8 +82,10 @@ tls_crt = os.path.join(fileDir, 'tls', 'server.crt')
 tls_key = os.path.join(fileDir, 'tls', 'server.key')
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--facePredictor', type=str, help="Path to dlib's face predictor.",
+parser.add_argument('--shapePredictor', type=str, help="Path to dlib's shape predictor.",
                     default=os.path.join(dlibModelDir, "shape_predictor_5_face_landmarks.dat"))
+parser.add_argument('--facePredictor', type=str, help="Path to dlib's cnn face predictor.",
+                    default=os.path.join(dlibModelDir, "mmod_human_face_detector.dat"))
 parser.add_argument('--faceRecognitionModel', type=str, help="Path to dlib's face recognition model.",
                     default=os.path.join(dlibModelDir, 'dlib_face_recognition_resnet_model_v1.dat'))
 parser.add_argument('--imgDim', type=int,
@@ -108,8 +110,9 @@ parser.add_argument('--classifier', type=str,
                     default='RadiusNeighbors')
 
 args = parser.parse_args()
-detector = dlib.get_frontal_face_detector()
-sp = dlib.shape_predictor(args.facePredictor)
+hog_detector = dlib.get_frontal_face_detector()
+sp = dlib.shape_predictor(args.shapePredictor)
+cnn_face_detector = dlib.cnn_face_detection_model_v1(args.facePredictor)
 fr_model = dlib.face_recognition_model_v1(args.faceRecognitionModel)
 
 
@@ -521,7 +524,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             self.logProcessTime(2, 'Save input image')
 
             img = np.asarray(imgPIL)
-            bbs = detector(img, 1)
+            bbs = hog_detector(img, 1)
 
             print("Number of faces detected: {}".format(len(bbs)))
             self.logProcessTime(3, 'Detector get face bounding box')

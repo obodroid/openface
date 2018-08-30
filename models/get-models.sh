@@ -18,25 +18,43 @@ checkCmd wget
 checkCmd bunzip2
 
 mkdir -p dlib
+printf "\n\n====================================================\n"
+printf "Downloading dlib's model.\n"
+printf "Reference: https://github.com/davisking/dlib-models\n"
+printf "====================================================\n\n"
+
 if [ ! -f dlib/shape_predictor_68_face_landmarks.dat ]; then
-  printf "\n\n====================================================\n"
-  printf "Downloading dlib's public domain face landmarks model.\n"
-  printf "Reference: https://github.com/davisking/dlib-models\n\n"
-  printf "====================================================\n\n"
+  printf "shape_predictor_68_face_landmarks\n\n"
   wget -nv \
        http://dlib.net/files/shape_predictor_68_face_landmarks.dat.bz2 \
        -O dlib/shape_predictor_68_face_landmarks.dat.bz2
   [ $? -eq 0 ] || die "+ Error in wget."
   bunzip2 dlib/shape_predictor_68_face_landmarks.dat.bz2
   [ $? -eq 0 ] || die "+ Error using bunzip2."
+fi
 
+if [ ! -f dlib/shape_predictor_5_face_landmarks.dat ]; then
+  printf "shape_predictor_5_face_landmarks\n\n"
   wget -nv \
        http://dlib.net/files/shape_predictor_5_face_landmarks.dat.bz2 \
        -O dlib/shape_predictor_5_face_landmarks.dat.bz2
   [ $? -eq 0 ] || die "+ Error in wget."
   bunzip2 dlib/shape_predictor_5_face_landmarks.dat.bz2
   [ $? -eq 0 ] || die "+ Error using bunzip2."
+fi
 
+if [ ! -f dlib/mmod_human_face_detector.dat ]; then
+  printf "mmod_human_face_detector\n\n"
+  wget -nv \
+       http://dlib.net/files/mmod_human_face_detector.dat.bz2 \
+       -O dlib/mmod_human_face_detector.dat.bz2
+  [ $? -eq 0 ] || die "+ Error in wget."
+  bunzip2 dlib/mmod_human_face_detector.dat.bz2
+  [ $? -eq 0 ] || die "+ Error using bunzip2."
+fi
+
+if [ ! -f dlib/dlib_face_recognition_resnet_model_v1.dat ]; then
+  printf "dlib_face_recognition_resnet_model_v1\n\n"
   wget -nv \
        http://dlib.net/files/dlib_face_recognition_resnet_model_v1.dat.bz2 \
        -O dlib/dlib_face_recognition_resnet_model_v1.dat.bz2
@@ -50,7 +68,7 @@ if [ ! -f openface/nn4.small2.v1.t7 ]; then
   printf "\n\n====================================================\n"
   printf "Downloading OpenFace models, which are copyright\n"
   printf "Carnegie Mellon University and are licensed under\n"
-  printf "the Apache 2.0 License.\n\n"
+  printf "the Apache 2.0 License.\n"
   printf "====================================================\n\n"
 
   wget -nv \
@@ -106,6 +124,10 @@ checkmd5 \
 checkmd5 \
   dlib/shape_predictor_5_face_landmarks.dat \
   79db4b6294389d5ec3923c422efad7ec
+
+checkmd5 \
+  dlib/mmod_human_face_detector.dat \
+  8d2d36a0ab9adb57f4a866252fd9f047
 
 checkmd5 \
   dlib/dlib_face_recognition_resnet_model_v1.dat \
