@@ -524,12 +524,13 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             self.logProcessTime(2, 'Save input image')
 
             img = np.asarray(imgPIL)
-            bbs = hog_detector(img, 1)
+            bbs = cnn_face_detector(img, 1)
 
             print("Number of faces detected: {}".format(len(bbs)))
             self.logProcessTime(3, 'Detector get face bounding box')
 
             for index, bb in enumerate(bbs):
+                bb = bb.rect
                 print("keyframe: {}, index: {}, bb = {}".format(
                     keyframe, index, bb))
                 print("bb width = {}, height = {}".format(
