@@ -271,7 +271,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         p = len(X) / p_div if len(X) < 30 * p_div else 30
         p = 2 if p < 2 else p
         X_pca = PCA(n_components=nc).fit_transform(X, X)
-        tsne = TSNE(n_components=2, n_iter=3000, random_state=0, perplexity=p)
+        tsne = TSNE(n_components=2, n_iter=10000, random_state=0, perplexity=p)
         X_r = tsne.fit_transform(X_pca)
 
         label_ids = self.le.inverse_transform(y)
