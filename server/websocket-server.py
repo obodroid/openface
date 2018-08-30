@@ -333,10 +333,11 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     X_calibration, return_distance=False)
 
                 for i, neighbor in enumerate(neighbors):
-                    X_neighbor = np.take(X_train, neighbor, axis=0)
-                    y_neighbor = np.full(X_neighbor.shape[0], y_calibration[i])
-                    self.calibrationSet.append(
-                        round((1 - self.classifier.score(X_neighbor, y_neighbor)) * X_neighbor.shape[0]))
+                    if neighbor.shape[0] > 0:
+                        X_neighbor = np.take(X_train, neighbor, axis=0)
+                        y_neighbor = np.full(X_neighbor.shape[0], y_calibration[i])
+                        self.calibrationSet.append(
+                            round((1 - self.classifier.score(X_neighbor, y_neighbor)) * X_neighbor.shape[0]))
 
                 self.trainingData = (X_train, y_train)
 
