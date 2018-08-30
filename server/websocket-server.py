@@ -92,12 +92,13 @@ parser.add_argument('--imgPath', type=str, help="Path to images.",
                     default=os.path.join(fileDir, '..', 'data'))
 parser.add_argument('--cuda', action='store_true')
 parser.add_argument('--verbose', action='store_true')
+parser.add_argument('--saveImg', action='store_true')
 parser.add_argument('--port', type=int, default=9000,
                     help='WebSocket Port')
 parser.add_argument('--recentFaceTimeout', type=int,
                     help="Recent face timeout", default=10)
 parser.add_argument('--dth', type=str,
-                    help="Representation distance threshold", default=0.3)
+                    help="Representation distance threshold for recent face", default=0.2)
 parser.add_argument('--minFaceResolution', type=int,
                     help="Minimum face area resolution", default=100)
 parser.add_argument('--classifier', type=str,
@@ -131,12 +132,14 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         self.processRecentFace = False
         self.enableClassifier = True
         self.training = True
+        self.lastLogTime = time.time()
 
         self.modelFile = "working_classifier.pkl"
         (self.people, self.classifier) = self.getPreTrainedModel(self.modelFile)
 
         self.datasetFile = "working_dataset.pkl"
-        (self.trainingData, self.calibrationSet) = self.getPreTrainedDataset(self.datasetFile)
+        (self.trainingData, self.calibrationSet) = self.getPreTrainedDataset(
+            self.datasetFile)
 
         self.le = LabelEncoder().fit(self.people.keys())
 
@@ -323,12 +326,14 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 self.classifier = RadiusNeighborsClassifier(
                     radius=grid.best_params_['radius'], outlier_label=-1).fit(X_train, y_train)
 
-                neighbors = self.classifier.radius_neighbors(X_calibration, return_distance=False)
-                
+                neighbors = self.classifier.radius_neighbors(
+                    X_calibration, return_distance=False)
+
                 for i, neighbor in enumerate(neighbors):
                     X_neighbor = np.take(X_train, neighbor, axis=0)
                     y_neighbor = np.full(X_neighbor.shape[0], y_calibration[i])
-                    self.calibrationSet.append(round((1 - self.classifier.score(X_neighbor, y_neighbor)) * X_neighbor.shape[0]))
+                    self.calibrationSet.append(
+                        round((1 - self.classifier.score(X_neighbor, y_neighbor)) * X_neighbor.shape[0]))
 
                 self.trainingData = (X_train, y_train)
 
@@ -346,14 +351,15 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
                 self.classifier = SVC(C=grid.best_params_['C'], kernel='rbf',
                                       probability=True, gamma=grid.best_params_['gamma']).fit(X, y)
-                
+
                 self.trainingData = (X, y)
 
             print("Saving working classifier to '{}'".format(self.modelFile))
             joblib.dump((self.people, self.classifier), self.modelFile)
 
             print("Saving working dataset to '{}'".format(self.datasetFile))
-            joblib.dump((self.trainingData, self.calibrationSet), self.datasetFile)
+            joblib.dump((self.trainingData, self.calibrationSet),
+                        self.datasetFile)
 
         msg = {
             "type": "TRAINING_FINISHED"
@@ -462,11 +468,15 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     person = self.people[peopleId]
                     name = person.decode('utf-8')
 
-                    neighbor = self.classifier.radius_neighbors([rep], return_distance=False)[0]
-                    X_neighbor = np.take(self.trainingData[0], neighbor, axis=0)
+                    neighbor = self.classifier.radius_neighbors(
+                        [rep], return_distance=False)[0]
+                    X_neighbor = np.take(
+                        self.trainingData[0], neighbor, axis=0)
                     y_neighbor = np.full(X_neighbor.shape[0], predictIndex)
-                    nonconformity = (1 - self.classifier.score(X_neighbor, y_neighbor)) * X_neighbor.shape[0]
-                    confidence = sum(1.0 for c in self.calibrationSet if c >= nonconformity) / len(self.calibrationSet)
+                    nonconformity = (
+                        1 - self.classifier.score(X_neighbor, y_neighbor)) * X_neighbor.shape[0]
+                    confidence = sum(
+                        1.0 for c in self.calibrationSet if c >= nonconformity) / len(self.calibrationSet)
 
             print("Predict {} with confidence {}".format(name, confidence))
 
@@ -474,8 +484,16 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
     def processFrame(self, msg):
         try:
+
+            self.lastLogTime = time.time()
             start = time.time()
             dataURL = msg['dataURL']
+
+            if msg.has_key("keyframe"):
+                keyframe = msg['keyframe']
+            else:
+                keyframe = ""
+            print("Start processing frame {}".format(keyframe))
 
             if msg.has_key("robotId"):
                 robotId = msg['robotId']
@@ -495,21 +513,22 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             imgStr.seek(0)
             imgPIL = Image.open(imgStr)
 
-            if args.verbose:
-                imgPIL.save(os.path.join(
-                    args.imgPath, 'input', '{}-{}_{}.png'.format(robotId, videoId, msg['keyframe'])))
+            self.logProcessTime(1, 'Open PIL Image from base64')
+
+            if args.saveImg:
+                imgPIL.save(os.path.join(args.imgPath, 'input',
+                                         '{}-{}_{}.png'.format(robotId, videoId, keyframe)))
+            self.logProcessTime(2, 'Save input image')
 
             img = np.asarray(imgPIL)
             bbs = detector(img, 1)
-            print("Number of faces detected: {}".format(len(bbs)))
 
-            if args.verbose:
-                print("Get face bounding box at {} seconds.".format(
-                    time.time() - start))
+            print("Number of faces detected: {}".format(len(bbs)))
+            self.logProcessTime(3, 'Detector get face bounding box')
 
             for index, bb in enumerate(bbs):
                 print("keyframe: {}, index: {}, bb = {}".format(
-                    msg['keyframe'], index, bb))
+                    keyframe, index, bb))
                 print("bb width = {}, height = {}".format(
                     bb.width(), bb.height()))
 
@@ -525,12 +544,14 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 content = 'data:image/png;base64,' + \
                     base64.b64encode(cropImgStr.getvalue())
 
+                self.logProcessTime(4, 'Crop image')
                 phash = str(imagehash.phash(Image.fromarray(cropImg)))
 
-                if args.verbose:
+                if args.saveImg:
                     cropImgPIL.save(os.path.join(
-                        args.imgPath, 'output', '{}-{}_{}_{}.png'.format(robotId, videoId, msg['keyframe'], index + 1)))
+                        args.imgPath, 'output', '{}-{}_{}_{}.png'.format(robotId, videoId, keyframe, index + 1)))
 
+                self.logProcessTime(5, 'Save Cropped image output')
                 if bb.width() < args.minFaceResolution or bb.height() < args.minFaceResolution:
                     foundFace = Face(None, None, None, phash, content)
                     self.foundUser(robotId, videoId, foundFace)
@@ -540,9 +561,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 rep = np.array(
                     fr_model.compute_face_descriptor(img, shape))
 
-                if args.verbose:
-                    print("Neural network forward pass at {} seconds.".format(
-                        time.time() - start))
+                self.logProcessTime(6, 'Neural network forward pass')
 
                 recentFaceId = self.getRecentFace(rep)
                 if recentFaceId is None or self.processRecentFace:
@@ -550,9 +569,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     if self.enableClassifier:
                         (peopleId, name, confidence) = self.classifyFace(rep)
 
-                        if args.verbose:
-                            print("Prediction at {} seconds.".format(
-                                time.time() - start))
+                        self.logProcessTime(7, 'Face Prediction')
 
                         if confidence and confidence > 0.5:
                             if peopleId in self.recentPeople:
@@ -587,10 +604,17 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     continue
 
             if args.verbose:
-                print("Process frame finished at {} seconds.".format(
-                    time.time() - start))
+                print("Finished processing frame {} for {} seconds.".format(keyframe,
+                                                                            time.time() - start))
         except:
             print(traceback.format_exc())
+
+    def logProcessTime(self, step, logMessage):
+        if args.verbose:
+            currentTime = time.time()
+            print("Step {} : {} seconds. >> {}".format(
+                step, currentTime - self.lastLogTime, logMessage))
+            self.lastLogTime = currentTime
 
 
 def main(reactor):
