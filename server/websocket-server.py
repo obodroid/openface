@@ -36,7 +36,8 @@ txaio.use_twisted()
 
 from autobahn.twisted.websocket import WebSocketServerProtocol, \
     WebSocketServerFactory
-from twisted.internet import task, defer
+from twisted.internet import task, reactor, threads
+from twisted.internet.defer import Deferred, inlineCallbacks
 from twisted.internet.ssl import DefaultOpenSSLContextFactory
 from twisted.python import log
 
@@ -166,7 +167,9 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
     def onOpen(self):
         print("WebSocket connection open.")
 
+    @inlineCallbacks
     def onMessage(self, payload, isBinary):
+        print("\n onMessage \n")
         raw = payload.decode('utf8')
         msg = json.loads(raw)
 
@@ -175,7 +178,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         elif msg['type'] == "NULL":
             self.sendMessage('{"type": "NULL"}')
         elif msg['type'] == "FRAME":
-            self.processFrame(msg)
+            yield self.processFrame(msg)
             self.sendMessage('{"type": "PROCESSED"}')
         elif msg['type'] == "PROCESS_RECENT_FACE":
             self.processRecentFace = msg['val']
@@ -335,7 +338,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 for i, neighbor in enumerate(neighbors):
                     if neighbor.shape[0] > 0:
                         X_neighbor = np.take(X_train, neighbor, axis=0)
-                        y_neighbor = np.full(X_neighbor.shape[0], y_calibration[i])
+                        y_neighbor = np.full(
+                            X_neighbor.shape[0], y_calibration[i])
                         self.calibrationSet.append(
                             round((1 - self.classifier.score(X_neighbor, y_neighbor)) * X_neighbor.shape[0]))
 
@@ -486,10 +490,9 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
         return (peopleId, name, confidence)
 
+    @inlineCallbacks
     def processFrame(self, msg):
         try:
-
-            self.lastLogTime = time.time()
             start = time.time()
             dataURL = msg['dataURL']
 
@@ -497,7 +500,9 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 keyframe = msg['keyframe']
             else:
                 keyframe = ""
-            print("Start processing frame {}".format(keyframe))
+
+            self.logProcessTime(
+                0, "Start processing frame {}".format(keyframe))
 
             if msg.has_key("robotId"):
                 robotId = msg['robotId']
@@ -525,7 +530,15 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             self.logProcessTime(2, 'Save input image')
 
             img = np.asarray(imgPIL)
-            bbs = cnn_face_detector(img, 1)
+
+            print(len(reactor.getThreadPool().threads))
+
+            def detect_face(img):
+                d = Deferred()
+                reactor.callLater(1, lambda: threads.deferToThread(lambda: d.callback(cnn_face_detector(img, 1))))
+                return d
+
+            bbs = yield detect_face(img)
 
             print("Number of faces detected: {}".format(len(bbs)))
             self.logProcessTime(3, 'Detector get face bounding box')
@@ -628,7 +641,7 @@ def main(reactor):
     factory.protocol = OpenFaceServerProtocol
     ctx_factory = DefaultOpenSSLContextFactory(tls_key, tls_crt)
     reactor.listenSSL(args.port, factory, ctx_factory)
-    return defer.Deferred()
+    return Deferred()
 
 
 if __name__ == '__main__':
