@@ -177,12 +177,21 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             self.sendMessage('{"type": "NULL"}')
         elif msg['type'] == "FRAME":
             print("\n on message: FRAME \n")
+            from datetime import datetime
             from time import sleep
             def mockStartThread(): # used for increasing thread pool size
-                sleep(3)
-            reactor.callLater(0, lambda: reactor.callInThread(mockStartThread))
-            reactor.callLater(0, lambda: reactor.callInThread(self.processFrame, msg))
-            self.sendMessage('{"type": "PROCESSED"}')
+                sleep(5)
+            if len(reactor.getThreadPool().threads) < 10:
+                reactor.callLater(0, lambda: reactor.callInThread(mockStartThread))
+
+            now = datetime.now()
+            time_diff = now - datetime.strptime(msg['time'], '%Y-%m-%dT%H:%M:%S.%fZ')
+            print("frame latency: {}".format(time_diff))
+            if time_diff.seconds < 1:
+                reactor.callLater(0, lambda: reactor.callInThread(self.processFrame, msg))
+                self.sendMessage('{"type": "PROCESSED"}')
+            else:
+                print("drop delayed frame")
         elif msg['type'] == "PROCESS_RECENT_FACE":
             self.processRecentFace = msg['val']
         elif msg['type'] == "ENABLE_CLASSIFIER":
