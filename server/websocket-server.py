@@ -203,9 +203,9 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         elif msg['type'] == 'SET_MAX_FACE_ID':
             self.faceId = int(msg['val']) + 1
         elif msg['type'] == "REQ_SYNC_IDENTITY":
-            def getPeople(peopleId, name): return {
+            def getPeople(peopleId, label): return {
                 'peopleId': peopleId,
-                'name': name
+                'label': label
             }
             newMsg = {
                 "type": "SYNC_IDENTITY",
@@ -244,11 +244,11 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
         for jsImage in jsImages:
             h = jsImage['hash'].encode('ascii', 'ignore')
-            self.images[h] = Face(np.array(jsImage['representation']),
+            self.images[h] = Face(np.array(jsImage['rep']),
                                   jsImage['identity'])
 
         label_ids = [int(o['people_id']) for o in jsPeople]
-        labels = [str(o['name']) for o in jsPeople]
+        labels = [str(o['label']) for o in jsPeople]
         self.people = dict(zip(label_ids, labels))
         self.le = LabelEncoder().fit(self.people.keys())
 
@@ -461,15 +461,15 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             self.faceId += 1
 
         if face.identity:
-            msg["predict_name"] = face.name
+            msg["predict_name"] = face.label
             msg["predict_people_id"] = face.identity
-        elif face.name:
-            msg["label"] = face.name
+        elif face.label:
+            msg["label"] = face.label
 
         self.sendMessage(json.dumps(msg))
 
     def classifyFace(self, rep):
-        (peopleId, name, confidence) = (None, None, None)
+        (peopleId, label, confidence) = (None, None, None)
 
         if self.classifier:
             if isinstance(self.classifier, SVC):
@@ -478,7 +478,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 predictIndex = np.argmax(predictions)
                 peopleId = self.le.inverse_transform(predictIndex)
                 person = self.people[peopleId]
-                name = person.decode('utf-8')
+                label = person.decode('utf-8')
                 confidence = predictions[predictIndex]
 
             elif isinstance(self.classifier, RadiusNeighborsClassifier):
@@ -486,7 +486,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 if predictIndex >= 0:
                     peopleId = self.le.inverse_transform(predictIndex)
                     person = self.people[peopleId]
-                    name = person.decode('utf-8')
+                    label = person.decode('utf-8')
 
                     neighbor = self.classifier.radius_neighbors(
                         [rep], return_distance=False)[0]
@@ -498,9 +498,9 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     confidence = sum(
                         1.0 for c in self.calibrationSet if c >= nonconformity) / len(self.calibrationSet)
 
-            print("Predict {} with confidence {}".format(name, confidence))
+            print("Predict {} with confidence {}".format(label, confidence))
 
-        return (peopleId, name, confidence)
+        return (peopleId, label, confidence)
 
     def processFrame(self, msg):
         try:
@@ -591,7 +591,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 if recentFaceId is None or self.processRecentFace:
                     faceId = recentFaceId if recentFaceId is not None else self.faceId
                     if self.enableClassifier:
-                        (peopleId, name, confidence) = self.classifyFace(rep)
+                        (peopleId, label, confidence) = self.classifyFace(rep)
 
                         self.logProcessTime(7, 'Face Prediction')
 
@@ -611,7 +611,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                             }
 
                             foundFace = Face(
-                                rep, peopleId, faceId, phash, content, name)
+                                rep, peopleId, faceId, phash, content, label)
                         else:
                             foundFace = self.createUnknownFace(
                                 rep, faceId, phash, content)
