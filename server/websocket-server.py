@@ -559,6 +559,14 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             self.logProcessTime(2, 'Save input image')
 
             img = np.asarray(imgPIL)
+            img_gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+            focus_measure = cv2.Laplacian(img_gray, cv2.CV_64F).var()
+
+            print("Focus Measure: {}".format(focus_measure))
+            if focus_measure < 200:
+                print("Drop blurry frame")
+                return
+
             bbs = cnn_face_detector(img, 1)
 
             print("Number of faces detected: {}".format(len(bbs)))
@@ -642,9 +650,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 else:
                     continue
 
-            if args.verbose:
-                print("Finished processing frame {} for {} seconds.".format(keyframe,
-                                                                            time.time() - start))
+            print("Finished processing frame {} for {} seconds.".format(
+                keyframe, time.time() - start))
         except:
             print(traceback.format_exc())
 
