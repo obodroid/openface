@@ -179,16 +179,20 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             print("\n on message: FRAME \n")
             from datetime import datetime
             from time import sleep
-            def mockStartThread(): # used for increasing thread pool size
+
+            def mockStartThread():  # used for increasing thread pool size
                 sleep(5)
             if len(reactor.getThreadPool().threads) < 10:
-                reactor.callLater(0, lambda: reactor.callInThread(mockStartThread))
+                reactor.callLater(
+                    0, lambda: reactor.callInThread(mockStartThread))
 
             now = datetime.now()
-            time_diff = now - datetime.strptime(msg['time'], '%Y-%m-%dT%H:%M:%S.%fZ')
+            time_diff = now - \
+                datetime.strptime(msg['time'], '%Y-%m-%dT%H:%M:%S.%fZ')
             print("frame latency: {}".format(time_diff))
             if time_diff.seconds < 1:
-                reactor.callLater(0, lambda: reactor.callInThread(self.processFrame, msg))
+                reactor.callLater(
+                    0, lambda: reactor.callInThread(self.processFrame, msg))
                 self.sendMessage('{"type": "PROCESSED"}')
             else:
                 print("drop delayed frame")
@@ -341,8 +345,12 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 X_train, X_calibration, y_train, y_calibration = train_test_split(
                     X, y, test_size=test_size, random_state=0)
 
+                loosen_factor = 1.5
                 self.classifier = RadiusNeighborsClassifier(
-                    radius=grid.best_params_['radius'], outlier_label=-1).fit(X_train, y_train)
+                    radius=grid.best_params_['radius'] * loosen_factor, outlier_label=-1).fit(X_train, y_train)
+
+                print("Train classifier with loosen radius of {}".format(
+                    grid.best_params_['radius'] * loosen_factor))
 
                 neighbors = self.classifier.radius_neighbors(
                     X_calibration, return_distance=False)
@@ -482,14 +490,20 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 confidence = predictions[predictIndex]
 
             elif isinstance(self.classifier, RadiusNeighborsClassifier):
+                neighbor = self.classifier.radius_neighbors(
+                    [rep], return_distance=False)[0]
+
+                neighborIndices = np.take(
+                    self.trainingData[1], neighbor, axis=0)
+                neighborPeopleId = self.le.inverse_transform(neighborIndices)
+                print("\nNearest neighbor peopleIds : {}".format(neighborPeopleId))
+
                 predictIndex = self.classifier.predict(rep.reshape(1, -1))[0]
                 if predictIndex >= 0:
                     peopleId = self.le.inverse_transform(predictIndex)
                     person = self.people[peopleId]
                     label = person.decode('utf-8')
 
-                    neighbor = self.classifier.radius_neighbors(
-                        [rep], return_distance=False)[0]
                     X_neighbor = np.take(
                         self.trainingData[0], neighbor, axis=0)
                     y_neighbor = np.full(X_neighbor.shape[0], predictIndex)
@@ -498,14 +512,15 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     confidence = sum(
                         1.0 for c in self.calibrationSet if c >= nonconformity) / len(self.calibrationSet)
 
-            print("Predict {} with confidence {}".format(label, confidence))
+            print("\nPredict {} with confidence {}\n".format(label, confidence))
 
         return (peopleId, label, confidence)
 
     def processFrame(self, msg):
         try:
             if args.verbose:
-                print("Thread pool size: {}".format(len(reactor.getThreadPool().threads)))
+                print("Thread pool size: {}".format(
+                    len(reactor.getThreadPool().threads)))
 
             start = time.time()
             dataURL = msg['dataURL']
