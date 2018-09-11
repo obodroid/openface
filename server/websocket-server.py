@@ -104,6 +104,10 @@ parser.add_argument('--dth', type=str,
                     help="Representation distance threshold for recent face", default=0.2)
 parser.add_argument('--minFaceResolution', type=int,
                     help="Minimum face area resolution", default=100)
+parser.add_argument('--loosenFactor', type=float,
+                    help="Factor used to loosen classifier neighboring distance", default=1.25)
+parser.add_argument('--focusMeasure', type=int,
+                    help="Threshold for filtering out blurry image", default=150)
 parser.add_argument('--classifier', type=str,
                     choices=['SVC',
                              'RadiusNeighbors'],
@@ -345,7 +349,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 X_train, X_calibration, y_train, y_calibration = train_test_split(
                     X, y, test_size=test_size, random_state=0)
 
-                loosen_factor = 1.5
+                loosen_factor = args.loosenFactor
                 self.classifier = RadiusNeighborsClassifier(
                     radius=grid.best_params_['radius'] * loosen_factor, outlier_label=-1).fit(X_train, y_train)
 
@@ -563,7 +567,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             focus_measure = cv2.Laplacian(img_gray, cv2.CV_64F).var()
 
             print("Focus Measure: {}".format(focus_measure))
-            if focus_measure < 200:
+            if focus_measure < args.focusMeasure:
                 print("Drop blurry frame")
                 return
 
