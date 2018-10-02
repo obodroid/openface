@@ -107,7 +107,7 @@ parser.add_argument('--dth', type=str,
 parser.add_argument('--minFaceResolution', type=int,
                     help="Minimum face area resolution", default=100)
 parser.add_argument('--loosenFactor', type=float,
-                    help="Factor used to loosen classifier neighboring distance", default=1.25)
+                    help="Factor used to loosen classifier neighboring distance", default=1)
 parser.add_argument('--focusMeasure', type=int,
                     help="Threshold for filtering out blurry image", default=150)
 parser.add_argument('--classifier', type=str,
@@ -297,6 +297,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         else:
             (X, y) = d
 
+        print("TSNE fit transform")
         nc = None if len(X) < 50 else 50
         p_div = 7  # TODO : implement automatic perplexity selection algorithm
         p = len(X) / p_div if len(X) < 30 * p_div else 30
@@ -305,6 +306,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         tsne = TSNE(n_components=2, n_iter=10000, random_state=0, perplexity=p)
         X_r = tsne.fit_transform(X_pca)
 
+        print("Label encoder inverse transform")
         label_ids = self.le.inverse_transform(y)
 
         def getDataPoint(labelId, value, phash): return {
@@ -312,10 +314,12 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             'value': value,
             'phash': phash
         }
+
         msg = {
             "type": "TSNE_DATA",
             "data": map(getDataPoint, label_ids, X_r.tolist(), self.images.keys())
         }
+
         self.sendMessage(json.dumps(msg))
 
     def trainClassifier(self):
@@ -340,7 +344,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 radius_range = np.linspace(0.1, 1.5, num=15)
                 param_grid = dict(radius=radius_range)
                 grid = GridSearchCV(RadiusNeighborsClassifier(
-                    outlier_label=-1), param_grid=param_grid, cv=cv).fit(X, y)
+                    outlier_label=-1), param_grid=param_grid, cv=cv, n_jobs=-1).fit(X, y)
 
                 scores = grid.cv_results_[
                     'mean_test_score'].reshape(len(radius_range), 1)
@@ -353,7 +357,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
                 loosen_factor = args.loosenFactor
                 self.classifier = RadiusNeighborsClassifier(
-                    radius=grid.best_params_['radius'] * loosen_factor, outlier_label=-1).fit(X_train, y_train)
+                    radius=grid.best_params_['radius'] * loosen_factor, outlier_label=-1, n_jobs=-1).fit(X_train, y_train)
 
                 print("Train classifier with loosen radius of {}".format(
                     grid.best_params_['radius'] * loosen_factor))
