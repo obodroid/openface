@@ -27,6 +27,8 @@ evaluation/attic/*/*.csv
 evaluation/attic/*/*.pdf
 
 server/bower_components
+server/images/*
+server/images/.gitkeep
 
 models/dlib/*.dat
 
