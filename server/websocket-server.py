@@ -627,7 +627,15 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     continue
 
                 shape = sp(img, bb)
-                hp.pose_estimate(img, shape)
+                headPoseImage, p1, p2 = hp.pose_estimate(img, shape)
+                headPoseLength = cv2.norm(np.array(p1) - np.array(p2))
+                print("Head Pose Length: {}".format(headPoseLength))
+                if headPoseLength > 100:
+                    print("Drop non-frontal face")
+                    cv2.imwrite("images/side_"+datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")+".jpg", headPoseImage)
+                    continue
+                else:
+                    cv2.imwrite("images/front_"+datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")+".jpg", headPoseImage)
 
                 if args.faceRecognitionModel:
                     rep = np.array(

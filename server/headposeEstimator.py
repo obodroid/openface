@@ -14,21 +14,18 @@ def shape_to_np(shape, dtype="int"):
     # return the list of (x, y)-coordinates
     return coords
 
-def show_landmarks(image,shape):
-    landmarks = shape_to_np(shape)
-
+def show_landmarks_and_headpose(image, landmarks, p1, p2):
     for (x, y) in landmarks:
-        cv2.circle(image, (x, y), 1, (0, 0, 255), -1)
-    return image, landmarks
-    # cv2.imwrite("images/"+datetime.now().strftime("%Y-%m-%d_%H:%M:%S")+".jpg",image)
+        cv2.circle(image, (x, y), 3, (255, 0, 0), -1)
+    cv2.line(image, p1, p2, (0,0,255), 2)
 
 def pose_estimate(image, shape):
     # """
     # Given an image and a set of facial landmarks generates the direction of pose
     # """
-    # landmarks = shape_to_np(shape)
-    image, landmarks = show_landmarks(image,shape)
+    landmarks = shape_to_np(shape)
     size = image.shape
+    print("image size {}".format(size))
     image_points = np.array([
         (landmarks[33, 0], landmarks[33, 1]),     # Nose tip
         (landmarks[8, 0], landmarks[8, 1]),       # Chin
@@ -56,14 +53,14 @@ def pose_estimate(image, shape):
         ], dtype="double")
 
     dist_coeffs = np.zeros((4, 1))
-    success, rotation_vector, translation_vector = cv2.solvePnP(model_points, image_points, camera_matrix, dist_coeffs)     
-    #translation_vector = np.zeros((3,1))
-    print("rotation_vector - {}, translation_vector - {}".format(rotation_vector,translation_vector))
-    (nose_end_point2D, jacobian) = cv2.projectPoints(np.array([(0.0, 0.0, 1000.0)]), rotation_vector, translation_vector, camera_matrix, dist_coeffs)
-    print("jacobian - {}".format(jacobian))
+    _, rotation_vector, translation_vector = cv2.solvePnP(model_points, image_points, camera_matrix, dist_coeffs)
+    print("rotation_vector - {}".format(rotation_vector))
+    nose_end_point2D, _ = cv2.projectPoints(np.array([(0.0, 0.0, 1000.0)]), rotation_vector, translation_vector, camera_matrix, dist_coeffs)
     p1 = (int(image_points[0][0]), int(image_points[0][1]))
     p2 = (int(nose_end_point2D[0][0][0]), int(nose_end_point2D[0][0][1]))
     print("p1 - {}, p2 - {}".format(p1,p2))
-    cv2.line(image, p1, p2, (255,0,0), 2)
-    cv2.imwrite("images/"+datetime.now().strftime("%Y-%m-%d_%H:%M:%S")+".jpg",image)
-    return p1, p2
+
+    show_landmarks_and_headpose(image, landmarks, p1, p2)
+    image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+
+    return image, p1, p2
