@@ -118,10 +118,17 @@ parser.add_argument('--classifier', type=str,
                     default='RadiusNeighbors')
 
 args = parser.parse_args()
-hog_detector = dlib.get_frontal_face_detector()
 sp = dlib.shape_predictor(args.shapePredictor)
-cnn_face_detector = dlib.cnn_face_detection_model_v1(args.facePredictor)
-fr_model = dlib.face_recognition_model_v1(args.faceRecognitionModel)
+
+if args.facePredictor:
+    cnn_face_detector = dlib.cnn_face_detection_model_v1(args.facePredictor)
+else:
+    hog_detector = dlib.get_frontal_face_detector()
+
+if args.faceRecognitionModel:
+    fr_model = dlib.face_recognition_model_v1(args.faceRecognitionModel)
+else:
+    fr_model = None
 
 
 class MidpointNormalize(Normalize):
@@ -578,13 +585,17 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 print("Drop blurry frame")
                 return
 
-            bbs = cnn_face_detector(img, 1)
+            if args.facePredictor:
+                bbs = cnn_face_detector(img, 1)
+            else:
+                bbs = hog_detector(img, 1)
 
             print("Number of faces detected: {}".format(len(bbs)))
             self.logProcessTime(3, 'Detector get face bounding box')
 
             for index, bb in enumerate(bbs):
-                bb = bb.rect
+                if args.facePredictor:
+                    bb = bb.rect
                 print("keyframe: {}, index: {}, bb = {}".format(
                     keyframe, index, bb))
                 print("bb width = {}, height = {}".format(
@@ -616,9 +627,13 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     continue
 
                 shape = sp(img, bb)
-                hp.pose_estimate(img,shape)
-                rep = np.array(
-                    fr_model.compute_face_descriptor(img, shape))
+                hp.pose_estimate(img, shape)
+
+                if args.faceRecognitionModel:
+                    rep = np.array(
+                        fr_model.compute_face_descriptor(img, shape))
+                else:
+                    continue
 
                 self.logProcessTime(6, 'Neural network forward pass')
 
