@@ -57,7 +57,10 @@ def pose_estimate(image, shape):
 
     dist_coeffs = np.zeros((4, 1))
     success, rotation_vector, translation_vector = cv2.solvePnP(model_points, image_points, camera_matrix, dist_coeffs)     
+    #translation_vector = np.zeros((3,1))
+    print("rotation_vector - {}, translation_vector - {}".format(rotation_vector,translation_vector))
     (nose_end_point2D, jacobian) = cv2.projectPoints(np.array([(0.0, 0.0, 1000.0)]), rotation_vector, translation_vector, camera_matrix, dist_coeffs)
+    print("jacobian - {}".format(jacobian))
     p1 = (int(image_points[0][0]), int(image_points[0][1]))
     p2 = (int(nose_end_point2D[0][0][0]), int(nose_end_point2D[0][0][1]))
     print("p1 - {}, p2 - {}".format(p1,p2))

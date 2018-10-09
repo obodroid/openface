@@ -42,6 +42,7 @@ from twisted.internet.ssl import DefaultOpenSSLContextFactory
 from twisted.python import log
 
 from face import Face
+import headposeEstimator as hp
 
 import urllib
 import argparse
@@ -86,7 +87,7 @@ tls_key = os.path.join(fileDir, 'tls', 'server.key')
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--shapePredictor', type=str, help="Path to dlib's shape predictor.",
-                    default=os.path.join(dlibModelDir, "shape_predictor_5_face_landmarks.dat"))
+                    default=os.path.join(dlibModelDir, "shape_predictor_68_face_landmarks.dat"))
 parser.add_argument('--facePredictor', type=str, help="Path to dlib's cnn face predictor.",
                     default=os.path.join(dlibModelDir, "mmod_human_face_detector.dat"))
 parser.add_argument('--faceRecognitionModel', type=str, help="Path to dlib's face recognition model.",
@@ -615,6 +616,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     continue
 
                 shape = sp(img, bb)
+                hp.pose_estimate(img,shape)
                 rep = np.array(
                     fr_model.compute_face_descriptor(img, shape))
 
