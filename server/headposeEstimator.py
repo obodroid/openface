@@ -2,7 +2,7 @@ import numpy as np
 import cv2
 from datetime import datetime
 
-landmarks_size = 5
+landmarks_size = 68
 
 def shape_to_np(shape, dtype="int"):
     # initialize the list of (x, y)-coordinates

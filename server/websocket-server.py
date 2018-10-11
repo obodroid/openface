@@ -88,10 +88,14 @@ tls_key = os.path.join(fileDir, 'tls', 'server.key')
 parser = argparse.ArgumentParser()
 parser.add_argument('--shapePredictor', type=str, help="Path to dlib's shape predictor.",
                     default=os.path.join(dlibModelDir, "shape_predictor_5_face_landmarks.dat"))
+parser.add_argument('--headPosePredictor', type=str, help="Path to dlib's shape predictor.",
+                    default=os.path.join(dlibModelDir, "shape_predictor_68_face_landmarks.dat"))
 parser.add_argument('--facePredictor', type=str, help="Path to dlib's cnn face predictor.",
                     default=os.path.join(dlibModelDir, "mmod_human_face_detector.dat"))
 parser.add_argument('--faceRecognitionModel', type=str, help="Path to dlib's face recognition model.",
                     default=os.path.join(dlibModelDir, 'dlib_face_recognition_resnet_model_v1.dat'))
+parser.add_argument('--eyeCascade', type=str, help="Path to eye cascade.",
+                    default=os.path.join(modelDir, "haarcascade_eye.xml"))
 parser.add_argument('--imgDim', type=int,
                     help="Default image dimension.", default=96)
 parser.add_argument('--imgPath', type=str, help="Path to images.",
@@ -121,6 +125,8 @@ parser.add_argument('--classifier', type=str,
 
 args = parser.parse_args()
 sp = dlib.shape_predictor(args.shapePredictor)
+hpp = dlib.shape_predictor(args.headPosePredictor)
+eye_cascade = cv2.CascadeClassifier(args.eyeCascade)
 
 if args.facePredictor:
     cnn_face_detector = dlib.cnn_face_detection_model_v1(args.facePredictor)
@@ -637,20 +643,26 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     continue
 
                 shape = sp(img, bb)
-                headPoseImage, p1, p2 = hp.pose_estimate(img, shape)
+                headPose = hpp(img, bb)
+                headPoseImage, p1, p2 = hp.pose_estimate(img, headPose)
                 headPoseLength = cv2.norm(np.array(p1) - np.array(p2))
                 print("Head Pose Length: {}".format(headPoseLength))
 
+                eyes = eye_cascade.detectMultiScale(headPoseImage)
+                sideFace = headPoseLength > 100 or len(eyes) < 2
+
                 if args.maxThreadPoolSize == 1:
+                    for (ex,ey,ew,eh) in eyes:
+                        cv2.rectangle(headPoseImage,(ex,ey),(ex+ew,ey+eh),(0,255,0),2)
+                    cv2.putText(headPoseImage, 'Side' if sideFace else 'Front', (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255))
                     cv2.imshow('Head Pose', headPoseImage)
                     cv2.waitKey(1)
+                    if args.saveImg:
+                        cv2.imwrite("images/side_"+datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")+".jpg", headPoseImage)
 
-                if headPoseLength > 80:
+                if sideFace:
                     print("Drop non-frontal face")
-                    cv2.imwrite("images/side_"+datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")+".jpg", headPoseImage)
                     continue
-                else:
-                    cv2.imwrite("images/front_"+datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")+".jpg", headPoseImage)
 
                 if args.faceRecognitionModel:
                     rep = np.array(
