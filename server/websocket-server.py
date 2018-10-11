@@ -643,22 +643,25 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     continue
 
                 shape = sp(img, bb)
-                headPose = hpp(img, bb)
-                headPoseImage, p1, p2 = hp.pose_estimate(img, headPose)
+
+                headPose = hpp(img_gray, bb)
+                headPoseImage, p1, p2 = hp.pose_estimate(img_gray, headPose)
                 headPoseLength = cv2.norm(np.array(p1) - np.array(p2))
                 print("Head Pose Length: {}".format(headPoseLength))
 
-                eyes = eye_cascade.detectMultiScale(headPoseImage)
-                sideFace = headPoseLength > 100 or len(eyes) < 2
+                cropGrayImg = headPoseImage[bb.top():bb.bottom(),
+                              bb.left():bb.right()]
+                eyes = eye_cascade.detectMultiScale(cropGrayImg)
+                sideFace = headPoseLength > 150 or len(eyes) < 2
 
                 if args.maxThreadPoolSize == 1:
                     for (ex,ey,ew,eh) in eyes:
-                        cv2.rectangle(headPoseImage,(ex,ey),(ex+ew,ey+eh),(0,255,0),2)
-                    cv2.putText(headPoseImage, 'Side' if sideFace else 'Front', (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255))
-                    cv2.imshow('Head Pose', headPoseImage)
+                        cv2.rectangle(cropGrayImg,(ex,ey),(ex+ew,ey+eh),(0,255,0),2)
+                    cv2.putText(cropGrayImg, 'Side' if sideFace else 'Front', (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255))
+                    cv2.imshow('Head Pose', cropGrayImg)
                     cv2.waitKey(1)
                     if args.saveImg:
-                        cv2.imwrite("images/side_"+datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")+".jpg", headPoseImage)
+                        cv2.imwrite("images/side_"+datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")+".jpg", cropGrayImg)
 
                 if sideFace:
                     print("Drop non-frontal face")

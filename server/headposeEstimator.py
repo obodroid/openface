@@ -2,6 +2,7 @@ import numpy as np
 import cv2
 from datetime import datetime
 
+landmarks_size = 5 # not working
 landmarks_size = 68
 
 def shape_to_np(shape, dtype="int"):
@@ -82,6 +83,5 @@ def pose_estimate(image, shape):
     print("p1 - {}, p2 - {}".format(p1,p2))
 
     show_landmarks_and_headpose(image, landmarks, p1, p2)
-    image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
 
     return image, p1, p2
