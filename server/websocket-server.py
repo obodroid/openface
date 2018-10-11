@@ -103,6 +103,8 @@ parser.add_argument('--port', type=int, default=9000,
                     help='WebSocket Port')
 parser.add_argument('--recentFaceTimeout', type=int,
                     help="Recent face timeout", default=10)
+parser.add_argument('--maxThreadPoolSize', type=int,
+                    help="Max thread pool size", default=10)
 parser.add_argument('--dth', type=str,
                     help="Representation distance threshold for recent face", default=0.2)
 parser.add_argument('--minFaceResolution', type=int,
@@ -191,12 +193,16 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             self.sendMessage('{"type": "NULL"}')
         elif msg['type'] == "FRAME":
             print("\n on message: FRAME \n")
+            if args.maxThreadPoolSize == 1:
+                self.processFrame(msg)
+                return
+
             from datetime import datetime
             from time import sleep
 
             def mockStartThread():  # used for increasing thread pool size
                 sleep(5)
-            if len(reactor.getThreadPool().threads) < 10:
+            if len(reactor.getThreadPool().threads) < args.maxThreadPoolSize:
                 reactor.callLater(
                     0, lambda: reactor.callInThread(mockStartThread))
 
@@ -207,7 +213,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             if time_diff.seconds < 1:
                 reactor.callLater(
                     0, lambda: reactor.callInThread(self.processFrame, msg))
-                self.sendMessage('{"type": "PROCESSED"}')
             else:
                 print("drop delayed frame")
         elif msg['type'] == "PROCESS_RECENT_FACE":
@@ -630,6 +635,11 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 headPoseImage, p1, p2 = hp.pose_estimate(img, shape)
                 headPoseLength = cv2.norm(np.array(p1) - np.array(p2))
                 print("Head Pose Length: {}".format(headPoseLength))
+
+                if args.maxThreadPoolSize == 1:
+                    cv2.imshow('Head Pose', headPoseImage)
+                    cv2.waitKey(1)
+
                 if headPoseLength > 100:
                     print("Drop non-frontal face")
                     cv2.imwrite("images/side_"+datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")+".jpg", headPoseImage)
