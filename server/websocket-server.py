@@ -87,7 +87,7 @@ tls_key = os.path.join(fileDir, 'tls', 'server.key')
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--shapePredictor', type=str, help="Path to dlib's shape predictor.",
-                    default=os.path.join(dlibModelDir, "shape_predictor_68_face_landmarks.dat"))
+                    default=os.path.join(dlibModelDir, "shape_predictor_5_face_landmarks.dat"))
 parser.add_argument('--facePredictor', type=str, help="Path to dlib's cnn face predictor.",
                     default=os.path.join(dlibModelDir, "mmod_human_face_detector.dat"))
 parser.add_argument('--faceRecognitionModel', type=str, help="Path to dlib's face recognition model.",
@@ -578,7 +578,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
             if args.saveImg:
                 imgPIL.save(os.path.join(args.imgPath, 'input',
-                                         '{}-{}_{}.png'.format(robotId, videoId, keyframe)))
+                                         '{}-{}_{}.jpg'.format(robotId, videoId, keyframe)))
             self.logProcessTime(2, 'Save input image')
 
             img = np.asarray(imgPIL)
@@ -600,7 +600,12 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
             for index, bb in enumerate(bbs):
                 if args.facePredictor:
+                    print("Face detection confidence = {}".format(bb.confidence))
+                    if bb.confidence < 1:
+                        print("Drop low confidence face detection")
+                        continue
                     bb = bb.rect
+
                 print("keyframe: {}, index: {}, bb = {}".format(
                     keyframe, index, bb))
                 print("bb width = {}, height = {}".format(
@@ -640,7 +645,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     cv2.imshow('Head Pose', headPoseImage)
                     cv2.waitKey(1)
 
-                if headPoseLength > 100:
+                if headPoseLength > 80:
                     print("Drop non-frontal face")
                     cv2.imwrite("images/side_"+datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")+".jpg", headPoseImage)
                     continue
