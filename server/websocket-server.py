@@ -87,11 +87,15 @@ tls_key = os.path.join(fileDir, 'tls', 'server.key')
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--shapePredictor', type=str, help="Path to dlib's shape predictor.",
+                    default=os.path.join(dlibModelDir, "shape_predictor_5_face_landmarks.dat"))
+parser.add_argument('--headPosePredictor', type=str, help="Path to dlib's shape predictor.",
                     default=os.path.join(dlibModelDir, "shape_predictor_68_face_landmarks.dat"))
 parser.add_argument('--facePredictor', type=str, help="Path to dlib's cnn face predictor.",
                     default=os.path.join(dlibModelDir, "mmod_human_face_detector.dat"))
 parser.add_argument('--faceRecognitionModel', type=str, help="Path to dlib's face recognition model.",
                     default=os.path.join(dlibModelDir, 'dlib_face_recognition_resnet_model_v1.dat'))
+parser.add_argument('--eyeCascade', type=str, help="Path to eye cascade.",
+                    default=os.path.join(modelDir, "haarcascade_eye.xml"))
 parser.add_argument('--imgDim', type=int,
                     help="Default image dimension.", default=96)
 parser.add_argument('--imgPath', type=str, help="Path to images.",
@@ -103,6 +107,8 @@ parser.add_argument('--port', type=int, default=9000,
                     help='WebSocket Port')
 parser.add_argument('--recentFaceTimeout', type=int,
                     help="Recent face timeout", default=10)
+parser.add_argument('--maxThreadPoolSize', type=int,
+                    help="Max thread pool size", default=10)
 parser.add_argument('--dth', type=str,
                     help="Representation distance threshold for recent face", default=0.2)
 parser.add_argument('--minFaceResolution', type=int,
@@ -119,6 +125,8 @@ parser.add_argument('--classifier', type=str,
 
 args = parser.parse_args()
 sp = dlib.shape_predictor(args.shapePredictor)
+hpp = dlib.shape_predictor(args.headPosePredictor)
+eye_cascade = cv2.CascadeClassifier(args.eyeCascade)
 
 if args.facePredictor:
     cnn_face_detector = dlib.cnn_face_detection_model_v1(args.facePredictor)
@@ -191,12 +199,16 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             self.sendMessage('{"type": "NULL"}')
         elif msg['type'] == "FRAME":
             print("\n on message: FRAME \n")
+            if args.maxThreadPoolSize == 1:
+                self.processFrame(msg)
+                return
+
             from datetime import datetime
             from time import sleep
 
             def mockStartThread():  # used for increasing thread pool size
                 sleep(5)
-            if len(reactor.getThreadPool().threads) < 10:
+            if len(reactor.getThreadPool().threads) < args.maxThreadPoolSize:
                 reactor.callLater(
                     0, lambda: reactor.callInThread(mockStartThread))
 
@@ -207,7 +219,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             if time_diff.seconds < 1:
                 reactor.callLater(
                     0, lambda: reactor.callInThread(self.processFrame, msg))
-                self.sendMessage('{"type": "PROCESSED"}')
             else:
                 print("drop delayed frame")
         elif msg['type'] == "PROCESS_RECENT_FACE":
@@ -587,7 +598,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
             if args.saveImg:
                 imgPIL.save(os.path.join(args.imgPath, 'input',
-                                         '{}-{}_{}.png'.format(robotId, videoId, keyframe)))
+                                         '{}-{}_{}.jpg'.format(robotId, videoId, keyframe)))
             self.logProcessTime(2, 'Save input image')
 
             img = np.asarray(imgPIL)
@@ -609,7 +620,12 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
             for index, bb in enumerate(bbs):
                 if args.facePredictor:
+                    print("Face detection confidence = {}".format(bb.confidence))
+                    if bb.confidence < 1:
+                        print("Drop low confidence face detection")
+                        continue
                     bb = bb.rect
+
                 print("keyframe: {}, index: {}, bb = {}".format(
                     keyframe, index, bb))
                 print("bb width = {}, height = {}".format(
@@ -641,15 +657,29 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     continue
 
                 shape = sp(img, bb)
-                headPoseImage, p1, p2 = hp.pose_estimate(img, shape)
+
+                headPose = hpp(img_gray, bb)
+                headPoseImage, p1, p2 = hp.pose_estimate(img_gray, headPose)
                 headPoseLength = cv2.norm(np.array(p1) - np.array(p2))
                 print("Head Pose Length: {}".format(headPoseLength))
-                if headPoseLength > 100:
+
+                cropGrayImg = headPoseImage[bb.top():bb.bottom(),
+                              bb.left():bb.right()]
+                eyes = eye_cascade.detectMultiScale(cropGrayImg)
+                sideFace = headPoseLength > 150 or len(eyes) < 2
+
+                if args.maxThreadPoolSize == 1:
+                    for (ex,ey,ew,eh) in eyes:
+                        cv2.rectangle(cropGrayImg,(ex,ey),(ex+ew,ey+eh),(0,255,0),2)
+                    cv2.putText(cropGrayImg, 'Side' if sideFace else 'Front', (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255))
+                    cv2.imshow('Head Pose', cropGrayImg)
+                    cv2.waitKey(1)
+                    if args.saveImg:
+                        cv2.imwrite("images/side_"+datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")+".jpg", cropGrayImg)
+
+                if sideFace:
                     print("Drop non-frontal face")
-                    cv2.imwrite("images/side_"+datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")+".jpg", headPoseImage)
                     continue
-                else:
-                    cv2.imwrite("images/front_"+datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")+".jpg", headPoseImage)
 
                 if args.faceRecognitionModel:
                     rep = np.array(

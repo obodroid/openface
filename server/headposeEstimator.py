@@ -2,13 +2,16 @@ import numpy as np
 import cv2
 from datetime import datetime
 
+landmarks_size = 5 # not working
+landmarks_size = 68
+
 def shape_to_np(shape, dtype="int"):
     # initialize the list of (x, y)-coordinates
-    coords = np.zeros((68, 2), dtype=dtype)
+    coords = np.zeros((landmarks_size, 2), dtype=dtype)
  
-    # loop over the 68 facial landmarks and convert them
+    # loop over the all facial landmarks and convert them
     # to a 2-tuple of (x, y)-coordinates
-    for i in range(0, 68):
+    for i in range(0, landmarks_size):
         coords[i] = (shape.part(i).x, shape.part(i).y)
  
     # return the list of (x, y)-coordinates
@@ -26,23 +29,42 @@ def pose_estimate(image, shape):
     landmarks = shape_to_np(shape)
     size = image.shape
     print("image size {}".format(size))
-    image_points = np.array([
-        (landmarks[33, 0], landmarks[33, 1]),     # Nose tip
-        (landmarks[8, 0], landmarks[8, 1]),       # Chin
-        (landmarks[36, 0], landmarks[36, 1]),     # Left eye left corner
-        (landmarks[45, 0], landmarks[45, 1]),     # Right eye right corner
-        (landmarks[48, 0], landmarks[48, 1]),     # Left Mouth corner
-        (landmarks[54, 0], landmarks[54, 1])      # Right mouth corner
-        ], dtype="double")
 
-    model_points = np.array([
-        (0.0, 0.0, 0.0),             # Nose tip
-        (0.0, -330.0, -65.0),        # Chin
-        (-225.0, 170.0, -135.0),     # Left eye left corner
-        (225.0, 170.0, -135.0),      # Right eye right corner
-        (-150.0, -150.0, -125.0),    # Left Mouth corner
-        (150.0, -150.0, -125.0)      # Right mouth corner
-        ])
+    if landmarks_size == 68:
+        image_points = np.array([
+            (landmarks[33, 0], landmarks[33, 1]),     # Nose tip
+            (landmarks[8, 0], landmarks[8, 1]),       # Chin
+            (landmarks[36, 0], landmarks[36, 1]),     # Left eye left corner
+            (landmarks[45, 0], landmarks[45, 1]),     # Right eye right corner
+            (landmarks[48, 0], landmarks[48, 1]),     # Left Mouth corner
+            (landmarks[54, 0], landmarks[54, 1])      # Right mouth corner
+            ], dtype="double")
+    elif landmarks_size == 5:
+        image_points = np.array([
+            (landmarks[4, 0], landmarks[4, 1]),     # Nose Bottom
+            (landmarks[0, 0], landmarks[0, 1]),     # Left eye left corner
+            (landmarks[1, 0], landmarks[1, 1]),     # Left eye right corner
+            (landmarks[2, 0], landmarks[2, 1]),     # Right eye right corner
+            (landmarks[3, 0], landmarks[3, 1])      # Right eye left corner
+            ], dtype="double")
+
+    if landmarks_size == 68:
+        model_points = np.array([
+            (0.0, 0.0, 0.0),             # Nose tip
+            (0.0, -330.0, -65.0),        # Chin
+            (-225.0, 170.0, -135.0),     # Left eye left corner
+            (225.0, 170.0, -135.0),      # Right eye right corner
+            (-150.0, -150.0, -125.0),    # Left Mouth corner
+            (150.0, -150.0, -125.0)      # Right mouth corner
+            ])
+    elif landmarks_size == 5:
+        model_points = np.array([
+            (0.0, 0.0, 0.0),            # Nose Bottom
+            (-225.0, 170.0, -65.0),     # Left eye left corner
+            (-150.0, 170.0, -65.0),     # Left eye right corner
+            (225.0, 170.0, -65.0),      # Right eye right corner
+            (150.0, 170.0, -65.0)       # Right eye left corner
+            ])
 
     focal_length = size[1]
     center = (size[1]/2, size[0]/2)
@@ -61,6 +83,5 @@ def pose_estimate(image, shape):
     print("p1 - {}, p2 - {}".format(p1,p2))
 
     show_landmarks_and_headpose(image, landmarks, p1, p2)
-    image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
 
     return image, p1, p2
