@@ -643,7 +643,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     continue
 
                 shape = sp(img, bb)
-
                 headPose = hpp(img_gray, bb)
                 headPoseImage, p1, p2 = hp.pose_estimate(img_gray, headPose)
                 headPoseLength = cv2.norm(np.array(p1) - np.array(p2))
@@ -652,7 +651,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 cropGrayImg = headPoseImage[bb.top():bb.bottom(),
                               bb.left():bb.right()]
                 eyes = eye_cascade.detectMultiScale(cropGrayImg)
-                sideFace = headPoseLength > 150 or len(eyes) < 2
+                sideFace = headPoseLength > 300 or len(eyes) < 2
 
                 if args.maxThreadPoolSize == 1:
                     for (ex,ey,ew,eh) in eyes:
@@ -665,6 +664,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
                 if sideFace:
                     print("Drop non-frontal face")
+                    foundFace = Face(None, None, None, phash, content)
+                    self.foundUser(robotId, videoId, foundFace)
                     continue
 
                 if args.faceRecognitionModel:
