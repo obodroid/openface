@@ -545,14 +545,19 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                         1.0 for c in self.calibrationSet if c >= nonconformity) / len(self.calibrationSet)
 
             print("\nPredict {} with confidence {}\n".format(label, confidence))
-
+            
+            neighbors = []
+            for i in range(len(neighborPeopleIds)):
+                neighbors.append({
+                    'peopleId': neighborPeopleIds[i],
+                    'distance': neighborDistances[i]
+                })
             msg = {
                 "type": "CLASSIFIED",
                 "peopleId": peopleId,
                 "label": label,
                 "confidence": confidence,
-                "neighborPeopleIds": neighborPeopleIds.tolist(),
-                "neighborDistances": neighborDistances.tolist(),
+                "neighbors": neighbors,
             }
             
             self.sendMessage(json.dumps(msg))
