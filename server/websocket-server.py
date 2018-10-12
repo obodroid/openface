@@ -250,6 +250,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             self.sendTSNE(msg['people'] if 'people' in msg else self.people)
         elif msg['type'] == 'CLASSIFY':
             self.classifyFace(np.array(msg['rep']))
+        elif msg['type'] == 'RETRIEVE_NEIGHBORS':
+            self.retrieveNeighbors(np.array(msg['rep']))
         else:
             print("Warning: Unknown message type: {}".format(msg['type']))
 
@@ -495,7 +497,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         self.sendMessage(json.dumps(msg))
 
     def classifyFace(self, rep):
-        (peopleId, label, confidence) = (None, None, None)
+        peopleId, label, confidence, neighborPeopleIds, neighborDistances = None, None, None, None, None
 
         if self.classifier:
             if isinstance(self.classifier, SVC):
@@ -508,13 +510,14 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 confidence = predictions[predictIndex]
 
             elif isinstance(self.classifier, RadiusNeighborsClassifier):
-                neighbor = self.classifier.radius_neighbors(
-                    [rep], return_distance=False)[0]
+                neighbors = self.classifier.radius_neighbors(
+                    [rep], return_distance=True)
 
+                neighborDistances = neighbors[0][0]
                 neighborIndices = np.take(
-                    self.trainingData[1], neighbor, axis=0)
-                neighborPeopleId = self.le.inverse_transform(neighborIndices)
-                print("\nNearest neighbor peopleIds : {}".format(neighborPeopleId))
+                    self.trainingData[1], neighbors[1][0], axis=0)
+                neighborPeopleIds = self.le.inverse_transform(neighborIndices)
+                print("\nNearest neighbor peopleIds : {}".format(neighborPeopleIds))
 
                 predictIndex = self.classifier.predict(rep.reshape(1, -1))[0]
                 if predictIndex >= 0:
@@ -523,7 +526,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     label = person.decode('utf-8')
 
                     X_neighbor = np.take(
-                        self.trainingData[0], neighbor, axis=0)
+                        self.trainingData[0], neighbors[1][0], axis=0)
                     y_neighbor = np.full(X_neighbor.shape[0], predictIndex)
                     nonconformity = (
                         1 - self.classifier.score(X_neighbor, y_neighbor)) * X_neighbor.shape[0]
@@ -532,7 +535,18 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
             print("\nPredict {} with confidence {}\n".format(label, confidence))
 
-        return (peopleId, label, confidence)
+            msg = {
+                "type": "CLASSIFIED",
+                "peopleId": peopleId,
+                "label": label,
+                "confidence": confidence,
+                "neighborPeopleIds": neighborPeopleIds.tolist(),
+                "neighborDistances": neighborDistances.tolist(),
+            }
+            
+            self.sendMessage(json.dumps(msg))
+
+        return peopleId, label, confidence
 
     def processFrame(self, msg):
         try:
@@ -649,7 +663,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 if recentFaceId is None or self.processRecentFace:
                     faceId = recentFaceId if recentFaceId is not None else self.faceId
                     if self.enableClassifier:
-                        (peopleId, label, confidence) = self.classifyFace(rep)
+                        peopleId, label, confidence = self.classifyFace(rep)
 
                         self.logProcessTime(7, 'Face Prediction')
 
