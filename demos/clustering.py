@@ -193,7 +193,6 @@ class ClusteringServer:
         print("foundCnt - {}".format(foundCnt))
             
     def convertImageToRgbFrame(self,img):
-        imarr = np.asarray(img)
         buf = np.fliplr(np.asarray(img))
         rgbFrame = np.zeros((img.height, img.width, 3), dtype=np.uint8)
         rgbFrame[:, :, 0] = buf[:, :, 2]
