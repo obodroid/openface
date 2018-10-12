@@ -17,7 +17,7 @@
 import ptvsd
 
 # Allow other computers to attach to ptvsd at this IP address and port, using the secret
-# ptvsd.enable_attach("my_secret", address=('0.0.0.0', 3000))
+# ptvsd.enable_attach(address=('0.0.0.0', 3000))
 # Pause the program until a remote debugger is attached
 # ptvsd.wait_for_attach()
 
