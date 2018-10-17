@@ -42,7 +42,7 @@ from twisted.internet.ssl import DefaultOpenSSLContextFactory
 from twisted.python import log
 
 from face import Face
-import headposeEstimator as hp
+import headPoseEstimator as hp
 
 import urllib
 import argparse
@@ -117,6 +117,8 @@ parser.add_argument('--loosenFactor', type=float,
                     help="Factor used to loosen classifier neighboring distance", default=1)
 parser.add_argument('--focusMeasure', type=int,
                     help="Threshold for filtering out blurry image", default=150)
+parser.add_argument('--sideFaceThreshold', type=int,
+                    help="Threshold for filtering out side face image", default=10)
 parser.add_argument('--classifier', type=str,
                     choices=['SVC',
                              'RadiusNeighbors'],
@@ -670,7 +672,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 cropGrayImg = headPoseImage[bb.top():bb.bottom(),
                               bb.left():bb.right()]
                 eyes = eye_cascade.detectMultiScale(cropGrayImg)
-                sideFace = headPoseLength > 300 or len(eyes) < 2
+                sideFace = headPoseLength > args.sideFaceThreshold
 
                 if args.maxThreadPoolSize == 1:
                     for (ex,ey,ew,eh) in eyes:
