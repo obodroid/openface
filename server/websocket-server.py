@@ -608,7 +608,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
             img = np.asarray(imgPIL)
             img_gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-            focus_measure = cv2.Laplacian(img_gray, cv2.CV_64F).var()
+            focus_measure = np.max(cv2.convertScaleAbs(cv2.Laplacian(img_gray, cv2.CV_64F)))
 
             print("Focus Measure: {}".format(focus_measure))
             if focus_measure < args.focusMeasure:
