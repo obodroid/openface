@@ -118,7 +118,7 @@ parser.add_argument('--loosenFactor', type=float,
 parser.add_argument('--focusMeasure', type=int,
                     help="Threshold for filtering out blurry image", default=150)
 parser.add_argument('--sideFaceThreshold', type=int,
-                    help="Threshold for filtering out side face image", default=10)
+                    help="Threshold for filtering out side face image", default=8)
 parser.add_argument('--classifier', type=str,
                     choices=['SVC',
                              'RadiusNeighbors'],
@@ -666,7 +666,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 shape = sp(img, bb)
                 headPose = hpp(img_gray, bb)
                 headPoseImage, p1, p2 = hp.pose_estimate(img_gray, headPose)
-                headPoseLength = cv2.norm(np.array(p1) - np.array(p2))
+                headPoseLength = cv2.norm(np.array(p1) - np.array(p2)) / bb.width() * 100
                 print("Head Pose Length: {}".format(headPoseLength))
 
                 cropGrayImg = headPoseImage[bb.top():bb.bottom(),
