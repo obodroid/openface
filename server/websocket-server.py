@@ -751,7 +751,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
 
 def main(reactor):
-    log.startLogging(sys.stdout)
+    observer = log.startLogging(sys.stdout)
+    observer.timeFormat = "%Y-%m-%d %T.%f"
     factory = WebSocketServerFactory()
     factory.protocol = OpenFaceServerProtocol
     ctx_factory = DefaultOpenSSLContextFactory(tls_key, tls_crt)
