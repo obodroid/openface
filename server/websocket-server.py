@@ -671,10 +671,10 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
                 cropGrayImg = headPoseImage[bb.top():bb.bottom(),
                               bb.left():bb.right()]
-                eyes = eye_cascade.detectMultiScale(cropGrayImg)
                 sideFace = headPoseLength > args.sideFaceThreshold
 
                 if args.maxThreadPoolSize == 1:
+                    eyes = eye_cascade.detectMultiScale(cropGrayImg)
                     for (ex,ey,ew,eh) in eyes:
                         cv2.rectangle(cropGrayImg,(ex,ey),(ex+ew,ey+eh),(0,255,0),2)
                     cv2.putText(cropGrayImg, 'Side' if sideFace else 'Front', (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255))
