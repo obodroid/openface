@@ -756,8 +756,10 @@ def main(reactor):
     factory = WebSocketServerFactory()
     # factory.setProtocolOptions(utf8validateIncoming=False)
     factory.protocol = OpenFaceServerProtocol
-    ctx_factory = DefaultOpenSSLContextFactory(tls_key, tls_crt)
-    reactor.listenSSL(args.port, factory, ctx_factory)
+    # ctx_factory = DefaultOpenSSLContextFactory(tls_key, tls_crt)
+    # reactor.listenSSL(args.port, factory, ctx_factory)
+    reactor.listenTCP(args.port, factory)
+    reactor.run()
     return Deferred()
 
 
