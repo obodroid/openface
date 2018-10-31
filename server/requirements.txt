@@ -1,10 +1,10 @@
-autobahn == 0.10.4
+autobahn[accelerate] == 18.10.1
 imagehash == 1.0
-twisted == 15.2.1
+twisted == 18.9.0
 scipy >= 0.13.3, < 0.17
 scikit-learn >= 0.18, < 0.20
 protobuf >= 2.5, < 2.7
 appdirs >= 1.4.3
-pyOpenSSL >= 17.0.0
+pyOpenSSL >= 18.0.0
 cryptography >= 1.8.1
 service-identity >= 16.0.0
