@@ -112,7 +112,7 @@ parser.add_argument('--maxThreadPoolSize', type=int,
 parser.add_argument('--dth', type=str,
                     help="Representation distance threshold for recent face", default=0.2)
 parser.add_argument('--minFaceResolution', type=int,
-                    help="Minimum face area resolution", default=100)
+                    help="Minimum face area resolution", default=150)
 parser.add_argument('--loosenFactor', type=float,
                     help="Factor used to loosen classifier neighboring distance", default=1.5)
 parser.add_argument('--focusMeasure', type=int,
@@ -578,7 +578,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             if msg.has_key("keyframe"):
                 keyframe = msg['keyframe']
             else:
-                keyframe = ""
+                keyframe = start
 
             self.logProcessTime(
                 0, "Start processing frame {}".format(keyframe))
@@ -603,19 +603,12 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
             self.logProcessTime(1, 'Open PIL Image from base64')
 
+            img = np.asarray(imgPIL)
+
             if args.saveImg:
                 imgPIL.save(os.path.join(args.imgPath, 'input',
                                          '{}-{}_{}.jpg'.format(robotId, videoId, keyframe)))
             self.logProcessTime(2, 'Save input image')
-
-            img = np.asarray(imgPIL)
-            img_gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-            focus_measure = np.max(cv2.convertScaleAbs(cv2.Laplacian(img_gray, cv2.CV_64F)))
-
-            print("Focus Measure: {}".format(focus_measure))
-            if focus_measure < args.focusMeasure:
-                print("Drop blurry frame")
-                return
 
             if args.facePredictor:
                 bbs = cnn_face_detector(img, 1)
@@ -653,19 +646,35 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 self.logProcessTime(4, 'Crop image')
                 phash = str(imagehash.phash(Image.fromarray(cropImg)))
 
+                grayImg = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+                cropGrayImg = cv2.cvtColor(cropImg, cv2.COLOR_RGB2GRAY)
+
+                laplacianImg = cv2.Laplacian(cropGrayImg, cv2.CV_64F)
+                focus_measure = laplacianImg.var()
+
+                print("Focus Measure: {}".format(focus_measure))
+                blur = focus_measure < args.focusMeasure
+
                 if args.saveImg:
+                    laplacianImgPIL = scipy.misc.toimage(laplacianImg)
+                    laplacianImgPIL.save(os.path.join(
+                        args.imgPath, 'output', 'laplacian_{}-{}_{}-{}_{}_{}.png'.format('blur' if blur else 'sharp', focus_measure, robotId, videoId, keyframe, index + 1)))
                     cropImgPIL.save(os.path.join(
-                        args.imgPath, 'output', '{}-{}_{}_{}.png'.format(robotId, videoId, keyframe, index + 1)))
+                        args.imgPath, 'output', '{}-{}_{}-{}_{}_{}.png'.format('blur' if blur else 'sharp', focus_measure, robotId, videoId, keyframe, index + 1)))
 
                 self.logProcessTime(5, 'Save Cropped image output')
+
+                if blur:
+                    print("Drop blurry face")
+                    continue
+
                 if bb.width() < args.minFaceResolution or bb.height() < args.minFaceResolution:
                     foundFace = Face(None, None, None, phash, content)
                     self.foundUser(robotId, videoId, foundFace)
                     continue
 
-                shape = sp(img, bb)
-                headPose = hpp(img_gray, bb)
-                headPoseImage, p1, p2 = hp.pose_estimate(img_gray, headPose)
+                headPose = hpp(grayImg, bb)
+                headPoseImage, p1, p2 = hp.pose_estimate(grayImg, headPose)
                 headPoseLength = cv2.norm(np.array(p1) - np.array(p2)) / bb.width() * 100
                 print("Head Pose Length: {}".format(headPoseLength))
 
@@ -690,6 +699,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     continue
 
                 if args.faceRecognitionModel:
+                    shape = sp(img, bb)
                     rep = np.array(
                         fr_model.compute_face_descriptor(img, shape))
                 else:
