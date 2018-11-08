@@ -77,24 +77,6 @@ from matplotlib.colors import Normalize
 
 import benchmark
 import openface
-# log = logging.getLogger() # 'root' Logger
-# console = logging.StreamHandler()
-# timeNow = datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d_%H:%M:%S')
-# logFile = logging.FileHandler("/src/benchmark/face_bench_{}.log".format(timeNow))
-# saveDir = "/src/benchmark/images/"
-
-# format_str = '%(asctime)s\t%(levelname)s -- %(processName)s %(filename)s:%(lineno)s -- %(message)s'
-# console.setFormatter(logging.Formatter(format_str))
-# logFile.setFormatter(logging.Formatter(format_str))
-
-# log.addHandler(console) # prints to console.
-# log.addHandler(logFile) # prints to console.
-# log.setLevel(logging.DEBUG) # anything ERROR or above
-# log.warn('Face recognition benchmark test!')
-# log.critical('Going to load neural network over GPU!')
-
-# mode = ''
-# benchmarks = {}
 
 modelDir = os.path.join(fileDir, '..', 'models')
 dlibModelDir = os.path.join(modelDir, 'dlib')
@@ -159,27 +141,6 @@ if args.faceRecognitionModel:
 else:
     fr_model = None
 
-# def startBenchmark(period,tag):
-#     if tag not in benchmarks and mode == 'benchmark' :
-#         print("startBenchmark {}".format(tag))
-#         fps = FPS().start()
-#         benchmarks[tag] = fps
-#         t = Timer(period, endBenchmark,[fps,tag])
-#         t.start() # after 30 seconds, "hello, world" will be printed
-
-# def updateBenchmark(tag):
-#     # print("updateBenchmark {}".format(tag))
-#     if tag in benchmarks:
-#         benchmarks[tag].update()
-
-# def endBenchmark(fps,tag):
-#     print("endBenchmark {}".format(tag))
-#     fps.stop()
-#     log.info("{} rate: {:.2f}".format(tag,fps.fps()))
-#     if tag in benchmarks:
-#         del benchmarks[tag]
-
-
 class MidpointNormalize(Normalize):
     def __init__(self, vmin=None, vmax=None, midpoint=None, clip=False):
         self.midpoint = midpoint
@@ -188,7 +149,6 @@ class MidpointNormalize(Normalize):
     def __call__(self, value, clip=None):
         x, y = [self.vmin, self.midpoint, self.vmax], [0, 0.5, 1]
         return np.ma.masked_array(np.interp(value, x, y))
-
 
 class OpenFaceServerProtocol(WebSocketServerProtocol):
     def __init__(self):
