@@ -8,3 +8,4 @@ appdirs >= 1.4.3
 pyOpenSSL >= 18.0.0
 cryptography >= 1.8.1
 service-identity >= 16.0.0
+imutils >= 0.5.1

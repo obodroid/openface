@@ -115,7 +115,7 @@ parser.add_argument('--dth', type=str,
 parser.add_argument('--minFaceResolution', type=int,
                     help="Minimum face area resolution", default=150)
 parser.add_argument('--loosenFactor', type=float,
-                    help="Factor used to loosen classifier neighboring distance", default=1.25)
+                    help="Factor used to loosen classifier neighboring distance", default=1.5)
 parser.add_argument('--focusMeasure', type=int,
                     help="Threshold for filtering out blurry image", default=150)
 parser.add_argument('--sideFaceThreshold', type=int,
@@ -614,12 +614,12 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 benchmark.start("cnn_face_detector")
                 bbs = cnn_face_detector(img, 1)
                 benchmark.update("cnn_face_detector")
-                benchmark.stop("cnn_face_detector")
+                benchmark.end("cnn_face_detector")
             else:
                 benchmark.start("hog_detector")
                 bbs = hog_detector(img, 1)
                 benchmark.update("hog_detector")
-                benchmark.stop("hog_detector")
+                benchmark.end("hog_detector")
 
             print("Number of faces detected: {}".format(len(bbs)))
             self.logProcessTime(3, 'Detector get face bounding box')
@@ -710,7 +710,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     rep = np.array(
                         fr_model.compute_face_descriptor(img, shape))
                     benchmark.update("compute_face_descriptor")
-                    benchmark.stop("compute_face_descriptor")
+                    benchmark.end("compute_face_descriptor")
                 else:
                     continue
 
