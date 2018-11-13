@@ -24,12 +24,12 @@ log.setLevel(logging.DEBUG) # anything ERROR or above
 # log.warn('Import darknet.py!')
 # log.critical('Going to load neural network over GPU!')
 
-mode = 'benchmark'
+enable = False
 benchmarks = {}
 imageCount = 0
 
 def startAvg(period,tag):
-    if tag not in benchmarks and mode == 'benchmark' :
+    if tag not in benchmarks and enable:
         print("startAvg {}".format(tag))
         fps = FPS().start()
         benchmarks[tag] = fps
@@ -37,7 +37,6 @@ def startAvg(period,tag):
         t.start()
 
 def updateAvg(tag):
-    # print("updateBenchmark {}".format(tag))
     if tag in benchmarks:
         benchmarks[tag].update()
 
@@ -50,8 +49,7 @@ def endAvg(tag):
         del benchmarks[tag]
 
 def start(tag):
-    if tag not in benchmarks and mode == 'benchmark' :
-        # print("start {}".format(tag))
+    if tag not in benchmarks and enable:
         fps = FPS().start()
         benchmarks[tag] = fps
 
@@ -61,7 +59,6 @@ def update(tag):
 
 def end(tag):
     if tag in benchmarks:
-        # print("endBenchmark {}".format(tag))
         fps = benchmarks[tag]
         fps.stop()
         log.info("{} rate: {:.2f}".format(tag,fps.fps()))
@@ -69,7 +66,7 @@ def end(tag):
 
 def saveImage(img,label):
     global imageCount
-    if mode == 'benchmark' :
+    if enable:
         imageCount += 1
         filename = '{}'.format(imageCount)
         filepath = '{}/{}/{}.jpg'.format(saveDir,label,filename)
