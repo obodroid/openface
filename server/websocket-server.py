@@ -659,14 +659,11 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 # Create base64 cropped image
                 cropImg = img[bb.top():bb.bottom(),
                               bb.left():bb.right()]
-                cropImgPIL = scipy.misc.toimage(cropImg)
-                cropImgStr = StringIO.StringIO()
-                cropImgPIL.save(cropImgStr, format="PNG")
-                content = 'data:image/png;base64,' + \
-                    base64.b64encode(cropImgStr.getvalue())
-
+                _, jpgImg = cv2.imencode('.jpg', cv2.cvtColor(cropImg, cv2.COLOR_RGB2BGR))
+                content = base64.b64encode(jpgImg)
                 self.logProcessTime(
                     "4_crop_image", 'Crop image', robotId, videoId, keyframe)
+                    
                 phash = str(imagehash.phash(Image.fromarray(cropImg)))
 
                 grayImg = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
@@ -682,6 +679,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     laplacianImgPIL = scipy.misc.toimage(laplacianImg)
                     laplacianImgPIL.save(os.path.join(
                         args.imgPath, 'output', 'laplacian_{}-{}_{}-{}_{}_{}.png'.format('blur' if blur else 'sharp', focus_measure, robotId, videoId, keyframe, index + 1)))
+                    cropImgPIL = scipy.misc.toimage(cropImg)
                     cropImgPIL.save(os.path.join(
                         args.imgPath, 'output', '{}-{}_{}-{}_{}_{}.png'.format('blur' if blur else 'sharp', focus_measure, robotId, videoId, keyframe, index + 1)))
                     self.logProcessTime(
