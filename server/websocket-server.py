@@ -583,9 +583,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             else:
                 keyframe = start
 
-            self.logProcessTime(
-                0, "Start processing frame {}".format(keyframe))
-
             if msg.has_key("robotId"):
                 robotId = msg['robotId']
             else:
@@ -596,6 +593,9 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             else:
                 videoId = ""
 
+            self.logProcessTime(
+                "0_start", "Start processing frame {}".format(keyframe), robotId, videoId, keyframe)
+
             head = "data:image/jpeg;base64,"
             assert(dataURL.startswith(head))
             imgData = base64.b64decode(dataURL[len(head):])
@@ -604,14 +604,14 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             imgStr.seek(0)
             imgPIL = Image.open(imgStr)
 
-            self.logProcessTime(1, 'Open PIL Image from base64')
+            self.logProcessTime("1_open_image", 'Open PIL Image from base64', robotId, videoId, keyframe)
 
             img = np.asarray(imgPIL)
 
             if args.saveImg:
                 imgPIL.save(os.path.join(args.imgPath, 'input',
                                          '{}-{}_{}.jpg'.format(robotId, videoId, keyframe)))
-            self.logProcessTime(2, 'Save input image')
+                self.logProcessTime("2_save_image", 'Save input image', robotId, videoId, keyframe)
 
             if args.facePredictor:
                 benchmark.start("cnn_face_detector")
@@ -625,7 +625,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 benchmark.end("hog_detector")
 
             print("Number of faces detected: {}".format(len(bbs)))
-            self.logProcessTime(3, 'Detector get face bounding box')
+            self.logProcessTime("3_face_detected", 'Detector get face bounding box', robotId, videoId, keyframe)
             benchmark.update("processFrame")
             for index, bb in enumerate(bbs):
                 if args.facePredictor:
@@ -652,7 +652,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 content = 'data:image/png;base64,' + \
                     base64.b64encode(cropImgStr.getvalue())
 
-                self.logProcessTime(4, 'Crop image')
+                self.logProcessTime("4_crop_image", 'Crop image', robotId, videoId, keyframe)
                 phash = str(imagehash.phash(Image.fromarray(cropImg)))
 
                 grayImg = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
@@ -670,8 +670,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                         args.imgPath, 'output', 'laplacian_{}-{}_{}-{}_{}_{}.png'.format('blur' if blur else 'sharp', focus_measure, robotId, videoId, keyframe, index + 1)))
                     cropImgPIL.save(os.path.join(
                         args.imgPath, 'output', '{}-{}_{}-{}_{}_{}.png'.format('blur' if blur else 'sharp', focus_measure, robotId, videoId, keyframe, index + 1)))
-
-                self.logProcessTime(5, 'Save Cropped image output')
+                    self.logProcessTime("5_save_crop_image", 'Save Cropped image output', robotId, videoId, keyframe)
 
                 if blur:
                     print("Drop blurry face")
@@ -721,7 +720,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 else:
                     continue
 
-                self.logProcessTime(6, 'Neural network forward pass')
+                self.logProcessTime("6_feed_network", 'Neural network forward pass', robotId, videoId, keyframe)
 
                 recentFaceId = self.getRecentFace(rep)
                 if recentFaceId is None or self.processRecentFace:
@@ -729,7 +728,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     if self.enableClassifier:
                         peopleId, label, confidence = self.classifyFace(rep)
 
-                        self.logProcessTime(7, 'Face Prediction')
+                        self.logProcessTime("7_predict_face", 'Face Prediction', robotId, videoId, keyframe)
 
                         if confidence and confidence > 0.5:
                             if peopleId in self.recentPeople:
@@ -768,12 +767,22 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         except:
             print(traceback.format_exc())
 
-    def logProcessTime(self, step, logMessage):
+    def logProcessTime(self, step, logMessage, robotId, videoId, keyframe):
         if args.verbose:
             currentTime = time.time()
             print("Step {} : {} seconds. >> {}".format(
                 step, currentTime - self.lastLogTime, logMessage))
             self.lastLogTime = currentTime
+
+            msg = {
+                "type": "LOG",
+                "robotId": robotId,
+                "videoId": videoId,
+                "keyframe": keyframe,
+                "step": step,
+                "time": datetime.now().isoformat()
+            }
+            self.sendMessage(json.dumps(msg))
 
 
 def main(reactor):
