@@ -141,6 +141,7 @@ if args.faceRecognitionModel:
 else:
     fr_model = None
 
+
 class MidpointNormalize(Normalize):
     def __init__(self, vmin=None, vmax=None, midpoint=None, clip=False):
         self.midpoint = midpoint
@@ -149,6 +150,7 @@ class MidpointNormalize(Normalize):
     def __call__(self, value, clip=None):
         x, y = [self.vmin, self.midpoint, self.vmax], [0, 0.5, 1]
         return np.ma.masked_array(np.interp(value, x, y))
+
 
 class OpenFaceServerProtocol(WebSocketServerProtocol):
     def __init__(self):
@@ -476,18 +478,19 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
         return recentFaceId
 
-    def createUnknownFace(self, rep, cluster, phash=None, content=None):
+    def createUnknownFace(self, rep, cluster, phash, content):
         face = Face(rep, None, cluster, phash, content)
         self.unknowns[phash] = face
         return face
 
-    def foundUser(self, robotId, videoId, face):
+    def foundUser(self, robotId, videoId, keyframe, face):
         print("found people id: {}".format(face.identity))
 
         msg = {
             "type": "FOUND_USER",
             "robotId": robotId,
             "videoId": videoId,
+            "keyframe": keyframe,
             "phash": face.phash,
             "content": face.content,
             "rep": face.rep.tolist() if face.rep is not None else None,
@@ -546,7 +549,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                         1.0 for c in self.calibrationSet if c >= nonconformity) / len(self.calibrationSet)
 
             print("\nPredict {} with confidence {}\n".format(label, confidence))
-            
+
             neighbors = []
             for i in range(len(neighborPeopleIds)):
                 neighbors.append({
@@ -560,13 +563,13 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 "confidence": confidence,
                 "neighbors": neighbors,
             }
-            
+
             self.sendMessage(json.dumps(msg))
 
         return peopleId, label, confidence
 
     def processFrame(self, msg):
-        benchmark.startAvg(10.0,"processFrame")
+        benchmark.startAvg(10.0, "processFrame")
         try:
             if args.verbose:
                 print("Thread pool size: {}".format(
@@ -675,33 +678,37 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     continue
 
                 if bb.width() < args.minFaceResolution or bb.height() < args.minFaceResolution:
-                    foundFace = Face(None, None, None, phash, content)
-                    self.foundUser(robotId, videoId, foundFace)
+                    foundFace = Face(None, None, phash=phash, content=content)
+                    self.foundUser(robotId, videoId, keyframe, foundFace)
                     continue
 
                 headPose = hpp(grayImg, bb)
                 headPoseImage, p1, p2 = hp.pose_estimate(grayImg, headPose)
-                headPoseLength = cv2.norm(np.array(p1) - np.array(p2)) / bb.width() * 100
+                headPoseLength = cv2.norm(
+                    np.array(p1) - np.array(p2)) / bb.width() * 100
                 print("Head Pose Length: {}".format(headPoseLength))
 
                 cropGrayImg = headPoseImage[bb.top():bb.bottom(),
-                              bb.left():bb.right()]
+                                            bb.left():bb.right()]
                 sideFace = headPoseLength > args.sideFaceThreshold
 
                 if args.maxThreadPoolSize == 1:
                     eyes = eye_cascade.detectMultiScale(cropGrayImg)
-                    for (ex,ey,ew,eh) in eyes:
-                        cv2.rectangle(cropGrayImg,(ex,ey),(ex+ew,ey+eh),(0,255,0),2)
-                    cv2.putText(cropGrayImg, 'Side' if sideFace else 'Front', (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255))
+                    for (ex, ey, ew, eh) in eyes:
+                        cv2.rectangle(cropGrayImg, (ex, ey),
+                                      (ex+ew, ey+eh), (0, 255, 0), 2)
+                    cv2.putText(cropGrayImg, 'Side' if sideFace else 'Front',
+                                (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255))
                     cv2.imshow('Head Pose', cropGrayImg)
                     cv2.waitKey(1)
                     if args.saveImg:
-                        cv2.imwrite("images/side_"+datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")+".jpg", cropGrayImg)
+                        cv2.imwrite(
+                            "images/side_"+datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")+".jpg", cropGrayImg)
 
                 if sideFace:
                     print("Drop non-frontal face")
-                    foundFace = Face(None, None, None, phash, content)
-                    self.foundUser(robotId, videoId, foundFace)
+                    foundFace = Face(None, None, phash=phash, content=content)
+                    self.foundUser(robotId, videoId, keyframe, foundFace)
                     continue
 
                 if args.faceRecognitionModel:
@@ -752,7 +759,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                         foundFace = Face(rep, None, faceId,
                                          phash, content, label)
 
-                    self.foundUser(robotId, videoId, foundFace)
+                    self.foundUser(robotId, videoId, keyframe, foundFace)
                 else:
                     continue
             benchmark.updateAvg("processFrame")
