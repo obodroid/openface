@@ -61,8 +61,13 @@ def end(tag):
     if tag in benchmarks:
         fps = benchmarks[tag]
         fps.stop()
-        log.info("{} rate: {:.2f}".format(tag,fps.fps()))
+        elapsed = fps.elapsed()
+        rate = fps.fps()
+        log.info("Time Taken {}: {:.5f}".format(tag, elapsed))
+        log.info("{} rate: {:.2f}".format(tag, rate))
         del benchmarks[tag]
+        return tag, elapsed, rate
+    return None,None,None
 
 def saveImage(img,label):
     global imageCount

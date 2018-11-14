@@ -574,6 +574,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         return peopleId, label, confidence
 
     def processFrame(self, msg):
+        
         self.processCount += 1
         localProcessCount = self.processCount
         benchmark.startAvg(10.0, "processFrame")
@@ -615,6 +616,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 "1_open_image", 'Open PIL Image from base64', robotId, videoId, keyframe)
 
             img = np.asarray(imgPIL)
+            print("{} : img shape - {}".format(localProcessCount,img.shape))
 
             if args.saveImg:
                 imgPIL.save(os.path.join(args.imgPath, 'input',
@@ -622,13 +624,21 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 self.logProcessTime(
                     "2_save_image", 'Save input image', robotId, videoId, keyframe)
 
+            self.logProcessTime("3-1_face_detected", 'Detector get face bounding box', robotId, videoId, keyframe)
+
             if args.facePredictor:
                 benchmark.start(
                     "cnn_face_detector_{}".format(localProcessCount))
-                bbs = cnn_face_detector(img, 1)
+                bbs = cnn_face_detector(img, 0)
                 benchmark.update(
                     "cnn_face_detector_{}".format(localProcessCount))
-                benchmark.end("cnn_face_detector_{}".format(localProcessCount))
+                tag, elasped, rate = benchmark.end("cnn_face_detector_{}".format(localProcessCount))
+                if rate:
+                    if len(bbs) > 0:
+                        benchmark.logInfo("{} facePredictor_found : {:.2f}, {:.4f}, {}, {}".format( tag, rate, elasped, img.shape, len(bbs)))
+                    else:
+                        benchmark.logInfo("{} facePredictor_not_found : {:.2f}, {:.4f}, {}, {}".format( tag, rate, elasped, img.shape, len(bbs) ))
+
 
             else:
                 benchmark.start("hog_detector_{}".format(localProcessCount))
@@ -638,7 +648,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
             print("Number of faces detected: {}".format(len(bbs)))
             self.logProcessTime(
-                "3_face_detected", 'Detector get face bounding box', robotId, videoId, keyframe)
+                "3-2_face_detected", 'Detector get face bounding box', robotId, videoId, keyframe)
             benchmark.update("processFrame")
             for index, bb in enumerate(bbs):
                 if args.facePredictor:
