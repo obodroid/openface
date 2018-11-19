@@ -385,8 +385,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     X, y, test_size=test_size, random_state=0)
 
                 loosen_factor = args.loosenFactor
-                self.classifier = RadiusNeighborsClassifier(
-                    radius=grid.best_params_['radius'] * loosen_factor, outlier_label=-1, n_jobs=-1).fit(X_train, y_train)
+                self.classifier = RadiusNeighborsClassifier(radius=grid.best_params_[
+                                                            'radius'] * loosen_factor, weights='distance', outlier_label=-1, n_jobs=-1).fit(X_train, y_train)
 
                 print("Train classifier with loosen radius of {}".format(
                     grid.best_params_['radius'] * loosen_factor))
@@ -574,7 +574,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         return peopleId, label, confidence
 
     def processFrame(self, msg):
-        
+
         self.processCount += 1
         localProcessCount = self.processCount
         benchmark.startAvg(10.0, "processFrame")
@@ -616,7 +616,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 "1_open_image", 'Open PIL Image from base64', robotId, videoId, keyframe)
 
             img = np.asarray(imgPIL)
-            print("{} : img shape - {}".format(localProcessCount,img.shape))
+            print("{} : img shape - {}".format(localProcessCount, img.shape))
 
             if args.saveImg:
                 imgPIL.save(os.path.join(args.imgPath, 'input',
@@ -624,21 +624,21 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 self.logProcessTime(
                     "2_save_image", 'Save input image', robotId, videoId, keyframe)
 
-            self.logProcessTime("3-1_face_detected", 'Detector get face bounding box', robotId, videoId, keyframe)
-
             if args.facePredictor:
                 benchmark.start(
                     "cnn_face_detector_{}".format(localProcessCount))
                 bbs = cnn_face_detector(img, 0)
                 benchmark.update(
                     "cnn_face_detector_{}".format(localProcessCount))
-                tag, elasped, rate = benchmark.end("cnn_face_detector_{}".format(localProcessCount))
+                tag, elasped, rate = benchmark.end(
+                    "cnn_face_detector_{}".format(localProcessCount))
                 if rate:
                     if len(bbs) > 0:
-                        benchmark.logInfo("{} facePredictor_found : {:.2f}, {:.4f}, {}, {}".format( tag, rate, elasped, img.shape, len(bbs)))
+                        benchmark.logInfo("{} facePredictor_found : {:.2f}, {:.4f}, {}, {}".format(
+                            tag, rate, elasped, img.shape, len(bbs)))
                     else:
-                        benchmark.logInfo("{} facePredictor_not_found : {:.2f}, {:.4f}, {}, {}".format( tag, rate, elasped, img.shape, len(bbs) ))
-
+                        benchmark.logInfo("{} facePredictor_not_found : {:.2f}, {:.4f}, {}, {}".format(
+                            tag, rate, elasped, img.shape, len(bbs)))
 
             else:
                 benchmark.start("hog_detector_{}".format(localProcessCount))
@@ -648,8 +648,9 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
             print("Number of faces detected: {}".format(len(bbs)))
             self.logProcessTime(
-                "3-2_face_detected", 'Detector get face bounding box', robotId, videoId, keyframe)
+                "3_face_detected", 'Detector get face bounding box', robotId, videoId, keyframe)
             benchmark.update("processFrame")
+
             for index, bb in enumerate(bbs):
                 if args.facePredictor:
                     print("Face detection confidence = {}".format(bb.confidence))
@@ -669,11 +670,12 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 # Create base64 cropped image
                 cropImg = img[bb.top():bb.bottom(),
                               bb.left():bb.right()]
-                _, jpgImg = cv2.imencode('.jpg', cv2.cvtColor(cropImg, cv2.COLOR_RGB2BGR))
+                _, jpgImg = cv2.imencode(
+                    '.jpg', cv2.cvtColor(cropImg, cv2.COLOR_RGB2BGR))
                 content = base64.b64encode(jpgImg)
                 self.logProcessTime(
                     "4_crop_image", 'Crop image', robotId, videoId, keyframe)
-                    
+
                 phash = str(imagehash.phash(Image.fromarray(cropImg)))
 
                 grayImg = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
