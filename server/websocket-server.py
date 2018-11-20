@@ -117,7 +117,7 @@ parser.add_argument('--minFaceResolution', type=int,
 parser.add_argument('--loosenFactor', type=float,
                     help="Factor used to loosen classifier neighboring distance", default=1.6)
 parser.add_argument('--focusMeasure', type=int,
-                    help="Threshold for filtering out blurry image", default=150)
+                    help="Threshold for filtering out blurry image", default=20)
 parser.add_argument('--sideFaceThreshold', type=int,
                     help="Threshold for filtering out side face image", default=8)
 parser.add_argument('--confidenceThreshold', type=float,
