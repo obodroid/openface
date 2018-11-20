@@ -172,6 +172,9 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         (self.trainingData, self.calibrationSet) = self.getPreTrainedDataset(
             self.datasetFile)
 
+        self.tsneFile = "working_tsne.pkl"
+        self.tsneData = self.getPreTrainedTSNE(self.tsneFile)
+
         self.le = LabelEncoder().fit(self.people.keys())
 
         self.unknowns = {}
@@ -187,6 +190,11 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         if os.path.isfile(filename):
             return joblib.load(filename)
         return ([], None)
+
+    def getPreTrainedTSNE(self, filename):
+        if os.path.isfile(filename):
+            return joblib.load(filename)
+        return None      
 
     def onConnect(self, request):
         print("Client connecting: {0}".format(request.peer))
@@ -322,38 +330,43 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         return (X, y)
 
     def sendTSNE(self, people):
-        d = self.getData()
-        if d is None:
-            return
-        else:
-            (X, y) = d
+        if self.tsneData is None:
+            d = self.getData()
+            if d is not None:
+                (X, y) = d
 
-        print("TSNE fit transform")
-        nc = None if len(X) < 50 else 50
-        p_div = 7  # TODO : implement automatic perplexity selection algorithm
-        p = len(X) / p_div if len(X) < 30 * p_div else 30
-        p = 2 if p < 2 else p
-        X_pca = PCA(n_components=nc).fit_transform(X, X)
-        tsne = TSNE(n_components=2, n_iter=10000, random_state=0, perplexity=p)
-        X_r = tsne.fit_transform(X_pca)
+                print("TSNE fit transform")
+                nc = None if len(X) < 50 else 50
+                p_div = 7  # TODO : implement automatic perplexity selection algorithm
+                p = len(X) / p_div if len(X) < 30 * p_div else 30
+                p = 2 if p < 2 else p
+                X_pca = PCA(n_components=nc).fit_transform(X, X)
+                tsne = TSNE(n_components=2, n_iter=10000, random_state=0, perplexity=p)
+                X_r = tsne.fit_transform(X_pca)
 
-        print("Label encoder inverse transform")
-        label_ids = self.le.inverse_transform(y)
+                print("Label encoder inverse transform")
+                label_ids = self.le.inverse_transform(y)
 
-        def getDataPoint(labelId, value, phash): return {
-            'labelId': labelId,
-            'value': value,
-            'phash': phash
-        }
+                def getDataPoint(labelId, value, phash): return {
+                    'labelId': labelId,
+                    'value': value,
+                    'phash': phash
+                }
+
+                self.tsneData = map(getDataPoint, label_ids, X_r.tolist(), self.images.keys())
+
+                print("Saving working tsne to '{}'".format(self.tsneFile))
+                joblib.dump(self.tsneData, self.tsneFile)
 
         msg = {
             "type": "TSNE_DATA",
-            "data": map(getDataPoint, label_ids, X_r.tolist(), self.images.keys())
+            "data": self.tsneData
         }
 
         self.sendMessage(json.dumps(msg))
 
     def trainClassifier(self):
+        self.tsneData = None
         d = self.getData()
         if d is None:
             self.classifier = None
