@@ -115,13 +115,13 @@ parser.add_argument('--dth', type=str,
 parser.add_argument('--minFaceResolution', type=int,
                     help="Minimum face area resolution", default=150)
 parser.add_argument('--loosenFactor', type=float,
-                    help="Factor used to loosen classifier neighboring distance", default=1.5)
+                    help="Factor used to loosen classifier neighboring distance", default=1.6)
 parser.add_argument('--focusMeasure', type=int,
                     help="Threshold for filtering out blurry image", default=150)
 parser.add_argument('--sideFaceThreshold', type=int,
                     help="Threshold for filtering out side face image", default=8)
 parser.add_argument('--confidenceThreshold', type=float,
-                    help="Threshold for filtering out unconfident face classification", default=0.5)
+                    help="Threshold for filtering out unconfident face classification", default=0.2)
 parser.add_argument('--classifier', type=str,
                     choices=['SVC',
                              'RadiusNeighbors'],
@@ -385,6 +385,9 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
                 X_train, X_calibration, y_train, y_calibration = train_test_split(
                     X, y, test_size=test_size, random_state=0)
+
+                # use all data as training data
+                X_train, y_train = X, y
 
                 loosen_factor = args.loosenFactor
                 self.classifier = RadiusNeighborsClassifier(radius=grid.best_params_[
