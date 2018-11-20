@@ -120,6 +120,8 @@ parser.add_argument('--focusMeasure', type=int,
                     help="Threshold for filtering out blurry image", default=150)
 parser.add_argument('--sideFaceThreshold', type=int,
                     help="Threshold for filtering out side face image", default=8)
+parser.add_argument('--confidenceThreshold', type=float,
+                    help="Threshold for filtering out unconfident face classification", default=0.5)
 parser.add_argument('--classifier', type=str,
                     choices=['SVC',
                              'RadiusNeighbors'],
@@ -757,7 +759,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                         self.logProcessTime(
                             "7_predict_face", 'Face Prediction', robotId, videoId, keyframe)
 
-                        if confidence and confidence > 0.5:
+                        if confidence and confidence > args.confidenceThreshold:
                             if peopleId in self.recentPeople:
                                 timeDiff = datetime.now() - \
                                     self.recentPeople[peopleId]['time']
@@ -775,6 +777,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                             foundFace = Face(
                                 rep, peopleId, faceId, phash, content, label)
                         else:
+                            print("Drop unconfident face classification")
                             foundFace = self.createUnknownFace(
                                 rep, faceId, phash, content)
                     else:
