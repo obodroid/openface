@@ -616,7 +616,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 "1_open_image", 'Open PIL Image from base64', robotId, videoId, keyframe)
 
             img = np.asarray(imgPIL)
-            print("{} : img shape - {}".format(localProcessCount, img.shape))
 
             if args.saveImg:
                 imgPIL.save(os.path.join(args.imgPath, 'input',
@@ -659,8 +658,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                         continue
                     bb = bb.rect
 
-                print("keyframe: {}, index: {}, bb = {}".format(
-                    keyframe, index, bb))
                 print("bb width = {}, height = {}".format(
                     bb.width(), bb.height()))
 
@@ -800,7 +797,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
     def logProcessTime(self, step, logMessage, robotId, videoId, keyframe):
         if args.verbose or benchmark.enable:
             currentTime = time.time()
-            print("Keyframe: {} Step {} : {} seconds. >> {}".format(
+            print("Keyframe: {} Step: {} for {} seconds. >> {}".format(
                 keyframe, step, currentTime - self.lastLogTime, logMessage))
             self.lastLogTime = currentTime
 
