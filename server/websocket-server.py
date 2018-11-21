@@ -388,7 +388,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 radius_range = np.linspace(0.1, 1.5, num=15)
                 param_grid = dict(radius=radius_range)
                 grid = GridSearchCV(RadiusNeighborsClassifier(
-                    outlier_label=-1), param_grid=param_grid, cv=cv, n_jobs=-1).fit(X, y)
+                    outlier_label=-1), param_grid=param_grid, cv=cv, n_jobs=4).fit(X, y)
 
                 scores = grid.cv_results_[
                     'mean_test_score'].reshape(len(radius_range), 1)
