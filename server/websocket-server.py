@@ -526,11 +526,11 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         if face.cluster == self.faceId:
             self.faceId += 1
 
-        if face.identity:
+        if face.label:
+            msg["label"] = face.label
+        elif face.identity:
             msg["predict_name"] = face.label
             msg["predict_people_id"] = face.identity
-        elif face.label:
-            msg["label"] = face.label
 
         self.sendMessage(json.dumps(msg))
 
