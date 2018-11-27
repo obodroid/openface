@@ -242,8 +242,10 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             else:
                 print("drop delayed frame")
         elif msg['type'] == "PROCESS_RECENT_FACE":
+            print("process recent face: {}".format(msg['val']))
             self.processRecentFace = msg['val']
         elif msg['type'] == "ENABLE_CLASSIFIER":
+            print("enable classifier: {}".format(msg['val']))
             self.enableClassifier = msg['val']
         elif msg['type'] == "TRAINING":
             self.training = msg['val']
@@ -671,7 +673,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             for index, bb in enumerate(bbs):
                 if args.facePredictor:
                     print("Face detection confidence = {}".format(bb.confidence))
-                    if bb.confidence < 1:
+                    if bb.confidence < 0.8:
                         print("Drop low confidence face detection")
                         continue
                     bb = bb.rect
@@ -799,6 +801,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     else:
                         if msg.has_key("label"):
                             label = msg['label']
+                            print("Found face with label: {}".format(label))
                         else:
                             label = None
                         foundFace = Face(rep, None, faceId,
