@@ -115,7 +115,7 @@ parser.add_argument('--dth', type=str,
 parser.add_argument('--minFaceResolution', type=int,
                     help="Minimum face area resolution", default=150)
 parser.add_argument('--loosenFactor', type=float,
-                    help="Factor used to loosen classifier neighboring distance", default=1.4)
+                    help="Factor used to loosen classifier neighboring distance", default=1.0)
 parser.add_argument('--focusMeasure', type=int,
                     help="Threshold for filtering out blurry image", default=20)
 parser.add_argument('--sideFaceThreshold', type=int,
@@ -194,7 +194,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
     def getPreTrainedTSNE(self, filename):
         if os.path.isfile(filename):
             return joblib.load(filename)
-        return None      
+        return None
 
     def onConnect(self, request):
         print("Client connecting: {0}".format(request.peer))
@@ -343,7 +343,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 p = len(X) / p_div if len(X) < 30 * p_div else 30
                 p = 2 if p < 2 else p
                 X_pca = PCA(n_components=nc).fit_transform(X, X)
-                tsne = TSNE(n_components=2, n_iter=10000, random_state=0, perplexity=p)
+                tsne = TSNE(n_components=2, n_iter=10000,
+                            random_state=0, perplexity=p)
                 X_r = tsne.fit_transform(X_pca)
 
                 print("Label encoder inverse transform")
@@ -355,7 +356,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     'phash': phash
                 }
 
-                self.tsneData = map(getDataPoint, label_ids, X_r.tolist(), self.images.keys())
+                self.tsneData = map(getDataPoint, label_ids,
+                                    X_r.tolist(), self.images.keys())
 
                 print("Saving working tsne to '{}'".format(self.tsneFile))
                 joblib.dump(self.tsneData, self.tsneFile)
@@ -377,6 +379,13 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             (X, y) = d
             self.calibrationSet = []
 
+            _, y_indices = np.unique(y, return_inverse=True)
+            class_counts = np.bincount(y_indices)
+            cond = [True if class_counts[a] > 1 else False for a in y_indices]
+
+            X_cv = np.extract(np.tile(cond,(X.shape[1],1)).transpose(), X).reshape(-1, X.shape[1])
+            y_cv = np.extract(cond, y)
+
             print("Training Classifier on {} labeled images.".format(
                 len(self.images)))
 
@@ -390,7 +399,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 radius_range = np.linspace(0.1, 1.5, num=15)
                 param_grid = dict(radius=radius_range)
                 grid = GridSearchCV(RadiusNeighborsClassifier(
-                    outlier_label=-1), param_grid=param_grid, cv=cv, n_jobs=4).fit(X, y)
+                    outlier_label=-1), param_grid=param_grid, cv=cv, n_jobs=4).fit(X_cv, y_cv)
 
                 scores = grid.cv_results_[
                     'mean_test_score'].reshape(len(radius_range), 1)
