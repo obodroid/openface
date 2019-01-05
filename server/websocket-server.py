@@ -218,6 +218,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         elif msg['type'] == "NULL":
             self.sendMessage('{"type": "NULL"}')
         elif msg['type'] == "FRAME":
+
+            benchmark.startAvg(10.0, "processFrame")
             print("\n on message: FRAME \n")
             if args.maxThreadPoolSize == 1:
                 self.processFrame(msg)
@@ -606,7 +608,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
         self.processCount += 1
         localProcessCount = self.processCount
-        benchmark.startAvg(10.0, "processFrame")
         try:
             if args.verbose:
                 print("Thread pool size: {}".format(
@@ -677,7 +678,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             print("Number of faces detected: {}".format(len(bbs)))
             self.logProcessTime(
                 "3_face_detected", 'Detector get face bounding box', robotId, videoId, keyframe)
-            benchmark.update("processFrame")
 
             for index, bb in enumerate(bbs):
                 if args.facePredictor:
@@ -822,6 +822,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             benchmark.updateAvg("processFrame")
             print("Finished processing frame {} for {} seconds.".format(
                 keyframe, time.time() - start))
+            self.logProcessTime(
+                            "8_finish_process", 'Finish Processing Face', robotId, videoId, keyframe)
         except:
             print(traceback.format_exc())
 
@@ -847,6 +849,7 @@ def main(reactor):
     observer = log.startLogging(sys.stdout)
     observer.timeFormat = "%Y-%m-%d %T.%f"
     factory = WebSocketServerFactory()
+    factory.setProtocolOptions(autoPingInterval=1)
     # factory.setProtocolOptions(utf8validateIncoming=False)
     factory.protocol = OpenFaceServerProtocol
     # ctx_factory = DefaultOpenSSLContextFactory(tls_key, tls_crt)
