@@ -216,7 +216,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         if msg['type'] == "ALL_STATE":
             self.loadState(msg['images'], msg['training'], msg['people'])
         elif msg['type'] == "NULL":
-            self.sendMessage('{"type": "NULL"}')
+            nullMsg = {"type": "NULL"}
+            self.pushMessage(nullMsg)
         elif msg['type'] == "FRAME":
 
             benchmark.startAvg(10.0, "processFrame")
@@ -238,11 +239,14 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             time_diff = now - \
                 datetime.strptime(msg['time'], '%Y-%m-%dT%H:%M:%S.%fZ')
             print("frame latency: {}".format(time_diff))
-            if time_diff.seconds < 1:
-                reactor.callLater(
+
+            reactor.callLater(
                     0, lambda: reactor.callInThread(self.processFrame, msg))
-            else:
-                print("drop delayed frame")
+            # if time_diff.seconds < 1:
+            #     reactor.callLater(
+            #         0, lambda: reactor.callInThread(self.processFrame, msg))
+            # else:
+            #     print("drop delayed frame")
         elif msg['type'] == "PROCESS_RECENT_FACE":
             print("process recent face: {}".format(msg['val']))
             self.processRecentFace = msg['val']
@@ -264,7 +268,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 "type": "SYNC_IDENTITY",
                 "people": map(getPeople, self.people.keys(), self.people.values())
             }
-            self.sendMessage(json.dumps(newMsg))
+            self.pushMessage(newMsg)
         elif msg['type'] == "UPDATE_IDENTITY":
             h = msg['hash'].encode('ascii', 'ignore')
             if h in self.images:
@@ -285,6 +289,9 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             self.sendTSNE(msg['people'] if 'people' in msg else self.people)
         elif msg['type'] == 'CLASSIFY':
             self.classifyFace(np.array(msg['rep']))
+        elif msg['type'] == "ECHO":
+            print("ECHO - {}".format(msg['time']))
+            self.pushMessage(msg)
         else:
             print("Warning: Unknown message type: {}".format(msg['type']))
 
@@ -369,7 +376,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             "data": self.tsneData
         }
 
-        self.sendMessage(json.dumps(msg))
+        self.pushMessage(msg)
 
     def trainClassifier(self):
         self.tsneData = None
@@ -462,7 +469,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         msg = {
             "type": "TRAINING_FINISHED"
         }
-        self.sendMessage(json.dumps(msg))
+        self.pushMessage(msg)
 
         if args.verbose:
             if args.classifier == 'RadiusNeighbors':
@@ -545,7 +552,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         elif face.label:
             msg["label"] = face.label
 
-        self.sendMessage(json.dumps(msg))
+        self.pushMessage(msg)
 
     def classifyFace(self, rep):
         peopleId, label, confidence, neighborPeopleIds, neighborDistances = None, None, None, None, None
@@ -600,7 +607,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 "neighbors": neighbors,
             }
 
-            self.sendMessage(json.dumps(msg))
+            self.pushMessage(msg)
 
         return peopleId, label, confidence
 
@@ -842,8 +849,10 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 "step": step,
                 "time": datetime.now().isoformat()
             }
-            self.sendMessage(json.dumps(msg))
-
+            self.pushMessage(msg)
+    
+    def pushMessage(self, msg):
+        self.sendMessage(json.dumps(msg),sync=True)
 
 def main(reactor):
     observer = log.startLogging(sys.stdout)

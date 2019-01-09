@@ -1,4 +1,4 @@
-autobahn[accelerate] == 18.10.1
+autobahn[accelerate] == 18.12.1
 imagehash == 1.0
 twisted == 18.9.0
 scipy >= 0.13.3, < 0.17
