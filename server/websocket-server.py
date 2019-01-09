@@ -15,6 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import ptvsd
+import config
 
 # Allow other computers to attach to ptvsd at this IP address and port, using the secret
 # ptvsd.enable_attach(address=('0.0.0.0', 3000))
@@ -78,57 +79,7 @@ from matplotlib.colors import Normalize
 import benchmark
 import openface
 
-modelDir = os.path.join(fileDir, '..', 'models')
-dlibModelDir = os.path.join(modelDir, 'dlib')
-openfaceModelDir = os.path.join(modelDir, 'openface')
-
-# For TLS connections
-tls_crt = os.path.join(fileDir, 'tls', 'server.crt')
-tls_key = os.path.join(fileDir, 'tls', 'server.key')
-
-parser = argparse.ArgumentParser()
-parser.add_argument('--shapePredictor', type=str, help="Path to dlib's shape predictor.",
-                    default=os.path.join(dlibModelDir, "shape_predictor_5_face_landmarks.dat"))
-parser.add_argument('--headPosePredictor', type=str, help="Path to dlib's shape predictor.",
-                    default=os.path.join(dlibModelDir, "shape_predictor_68_face_landmarks.dat"))
-parser.add_argument('--facePredictor', type=str, help="Path to dlib's cnn face predictor.",
-                    default=os.path.join(dlibModelDir, "mmod_human_face_detector.dat"))
-parser.add_argument('--faceRecognitionModel', type=str, help="Path to dlib's face recognition model.",
-                    default=os.path.join(dlibModelDir, 'dlib_face_recognition_resnet_model_v1.dat'))
-parser.add_argument('--eyeCascade', type=str, help="Path to eye cascade.",
-                    default=os.path.join(modelDir, "haarcascade_eye.xml"))
-parser.add_argument('--imgDim', type=int,
-                    help="Default image dimension.", default=96)
-parser.add_argument('--imgPath', type=str, help="Path to images.",
-                    default=os.path.join(fileDir, '..', 'data'))
-parser.add_argument('--cuda', action='store_true')
-parser.add_argument('--verbose', action='store_true')
-parser.add_argument('--saveImg', action='store_true')
-parser.add_argument('--port', type=int, default=9000,
-                    help='WebSocket Port')
-parser.add_argument('--recentFaceTimeout', type=int,
-                    help="Recent face timeout", default=10)
-parser.add_argument('--maxThreadPoolSize', type=int,
-                    help="Max thread pool size", default=10)
-parser.add_argument('--dth', type=str,
-                    help="Representation distance threshold for recent face", default=0.2)
-parser.add_argument('--minFaceResolution', type=int,
-                    help="Minimum face area resolution", default=150)
-parser.add_argument('--loosenFactor', type=float,
-                    help="Factor used to loosen classifier neighboring distance", default=1.0)
-parser.add_argument('--focusMeasure', type=int,
-                    help="Threshold for filtering out blurry image", default=20)
-parser.add_argument('--sideFaceThreshold', type=int,
-                    help="Threshold for filtering out side face image", default=8)
-parser.add_argument('--confidenceThreshold', type=float,
-                    help="Threshold for filtering out unconfident face classification", default=0.2)
-parser.add_argument('--classifier', type=str,
-                    choices=['SVC',
-                             'RadiusNeighbors'],
-                    help='The type of classifier to use.',
-                    default='RadiusNeighbors')
-
-args = parser.parse_args()
+args = config.loadConfig()
 sp = dlib.shape_predictor(args.shapePredictor)
 hpp = dlib.shape_predictor(args.headPosePredictor)
 eye_cascade = cv2.CascadeClassifier(args.eyeCascade)
@@ -863,7 +814,7 @@ def main(reactor):
     factory.protocol = OpenFaceServerProtocol
     # ctx_factory = DefaultOpenSSLContextFactory(tls_key, tls_crt)
     # reactor.listenSSL(args.port, factory, ctx_factory)
-    reactor.listenTCP(args.port, factory)
+    reactor.listenTCP(args.WEBSOCKET_PORT, factory)
     reactor.run()
     return Deferred()
 
