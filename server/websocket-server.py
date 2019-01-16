@@ -45,6 +45,7 @@ from twisted.python import log
 from face import Face
 import headPoseEstimator as hp
 
+import facenet
 import urllib
 import argparse
 import cv2
@@ -174,25 +175,28 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             benchmark.startAvg(10.0, "processFrame")
             print("\n on message: FRAME \n")
             if args.maxThreadPoolSize == 1:
-                self.processFrame(msg)
+                # self.processFrame(msg)
+                facenet.putLoad(msg,self.foundFaceCallback)
                 return
 
             from datetime import datetime
             from time import sleep
 
-            def mockStartThread():  # used for increasing thread pool size
-                sleep(5)
-            if len(reactor.getThreadPool().threads) < args.maxThreadPoolSize:
-                reactor.callLater(
-                    0, lambda: reactor.callInThread(mockStartThread))
+            # def mockStartThread():  # used for increasing thread pool size
+            #     sleep(5)
+            # if len(reactor.getThreadPool().threads) < args.maxThreadPoolSize:
+            #     reactor.callLater(
+            #         0, lambda: reactor.callInThread(mockStartThread))
 
             now = datetime.now()
             time_diff = now - \
                 datetime.strptime(msg['time'], '%Y-%m-%dT%H:%M:%S.%fZ')
             print("frame latency: {}".format(time_diff))
 
-            reactor.callLater(
-                    0, lambda: reactor.callInThread(self.processFrame, msg))
+            facenet.putLoad(msg,self.foundFaceCallback)
+
+            # reactor.callLater(
+            #         0, lambda: reactor.callInThread(self.processFrame, msg))
             # if time_diff.seconds < 1:
             #     reactor.callLater(
             #         0, lambda: reactor.callInThread(self.processFrame, msg))
@@ -562,228 +566,279 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
         return peopleId, label, confidence
 
-    def processFrame(self, msg):
+    def foundFaceCallback(self, robotId, videoId, keyframe, rep, phash, content, label=None):
 
-        self.processCount += 1
-        localProcessCount = self.processCount
-        try:
-            if args.verbose:
-                print("Thread pool size: {}".format(
-                    len(reactor.getThreadPool().threads)))
+        if rep is None:
+            # found face but cannot recognize user
+            foundFace = Face(rep, None, phash=phash, content=content)
+            self.foundUser(robotId, videoId, keyframe, foundFace)
+            return
 
-            start = time.time()
-            dataURL = msg['dataURL']
-
-            if msg.has_key("keyframe"):
-                keyframe = msg['keyframe']
-            else:
-                keyframe = start
-
-            if msg.has_key("robotId"):
-                robotId = msg['robotId']
-            else:
-                robotId = ""
-
-            if msg.has_key("videoId"):
-                videoId = msg['videoId']
-            else:
-                videoId = ""
-
-            self.logProcessTime(
-                "0_start", "Start processing frame {}".format(keyframe), robotId, videoId, keyframe)
-
-            head = "data:image/jpeg;base64,"
-            assert(dataURL.startswith(head))
-            imgData = base64.b64decode(dataURL[len(head):])
-            imgStr = StringIO.StringIO()
-            imgStr.write(imgData)
-            imgStr.seek(0)
-            imgPIL = Image.open(imgStr)
-
-            self.logProcessTime(
-                "1_open_image", 'Open PIL Image from base64', robotId, videoId, keyframe)
-
-            img = np.asarray(imgPIL)
-
-            if args.saveImg:
-                imgPIL.save(os.path.join(args.imgPath, 'input',
-                                         '{}-{}_{}.jpg'.format(robotId, videoId, keyframe)))
-                self.logProcessTime(
-                    "2_save_image", 'Save input image', robotId, videoId, keyframe)
-
-            if args.facePredictor:
-                benchmark.start(
-                    "cnn_face_detector_{}".format(localProcessCount))
-                bbs = cnn_face_detector(img, 0)
-                benchmark.update(
-                    "cnn_face_detector_{}".format(localProcessCount))
-                tag, elasped, rate = benchmark.end(
-                    "cnn_face_detector_{}".format(localProcessCount))
-                if rate:
-                    if len(bbs) > 0:
-                        benchmark.logInfo("{} facePredictor_found : {:.2f}, {:.4f}, {}, {}".format(
-                            tag, rate, elasped, img.shape, len(bbs)))
-                    else:
-                        benchmark.logInfo("{} facePredictor_not_found : {:.2f}, {:.4f}, {}, {}".format(
-                            tag, rate, elasped, img.shape, len(bbs)))
-
-            else:
-                benchmark.start("hog_detector_{}".format(localProcessCount))
-                bbs = hog_detector(img, 1)
-                benchmark.update("hog_detector_{}".format(localProcessCount))
-                benchmark.end("hog_detector_{}".format(localProcessCount))
-
-            print("Number of faces detected: {}".format(len(bbs)))
-            self.logProcessTime(
-                "3_face_detected", 'Detector get face bounding box', robotId, videoId, keyframe)
-
-            for index, bb in enumerate(bbs):
-                if args.facePredictor:
-                    print("Face detection confidence = {}".format(bb.confidence))
-                    if bb.confidence < 0.8:
-                        print("Drop low confidence face detection")
-                        continue
-                    bb = bb.rect
-
-                print("bb width = {}, height = {}".format(
-                    bb.width(), bb.height()))
-
-                if ((bb.left() < 0) | (bb.right() < 0) | (bb.top() < 0) | (bb.bottom() < 0)):
-                    continue
-
-                # Create base64 cropped image
-                cropImg = img[bb.top():bb.bottom(),
-                              bb.left():bb.right()]
-                _, jpgImg = cv2.imencode(
-                    '.jpg', cv2.cvtColor(cropImg, cv2.COLOR_RGB2BGR))
-                content = base64.b64encode(jpgImg)
-                self.logProcessTime(
-                    "4_crop_image", 'Crop image', robotId, videoId, keyframe)
-
-                phash = str(imagehash.phash(Image.fromarray(cropImg)))
-
-                grayImg = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-                cropGrayImg = cv2.cvtColor(cropImg, cv2.COLOR_RGB2GRAY)
-
-                laplacianImg = cv2.Laplacian(cropGrayImg, cv2.CV_64F)
-                focus_measure = laplacianImg.var()
-
-                print("Focus Measure: {}".format(focus_measure))
-                blur = focus_measure < args.focusMeasure
-
-                if args.saveImg:
-                    laplacianImgPIL = scipy.misc.toimage(laplacianImg)
-                    laplacianImgPIL.save(os.path.join(
-                        args.imgPath, 'output', 'laplacian_{}-{}_{}-{}_{}_{}.png'.format('blur' if blur else 'sharp', focus_measure, robotId, videoId, keyframe, index + 1)))
-                    cropImgPIL = scipy.misc.toimage(cropImg)
-                    cropImgPIL.save(os.path.join(
-                        args.imgPath, 'output', '{}-{}_{}-{}_{}_{}.png'.format('blur' if blur else 'sharp', focus_measure, robotId, videoId, keyframe, index + 1)))
-                    self.logProcessTime(
-                        "5_save_crop_image", 'Save Cropped image output', robotId, videoId, keyframe)
-
-                if blur:
-                    print("Drop blurry face")
-                    continue
-
-                if bb.width() < args.minFaceResolution or bb.height() < args.minFaceResolution:
-                    foundFace = Face(None, None, phash=phash, content=content)
-                    self.foundUser(robotId, videoId, keyframe, foundFace)
-                    continue
-
-                headPose = hpp(grayImg, bb)
-                headPoseImage, p1, p2 = hp.pose_estimate(grayImg, headPose)
-                headPoseLength = cv2.norm(
-                    np.array(p1) - np.array(p2)) / bb.width() * 100
-                print("Head Pose Length: {}".format(headPoseLength))
-
-                cropGrayImg = headPoseImage[bb.top():bb.bottom(),
-                                            bb.left():bb.right()]
-                sideFace = headPoseLength > args.sideFaceThreshold
-
-                if args.maxThreadPoolSize == 1:
-                    eyes = eye_cascade.detectMultiScale(cropGrayImg)
-                    for (ex, ey, ew, eh) in eyes:
-                        cv2.rectangle(cropGrayImg, (ex, ey),
-                                      (ex+ew, ey+eh), (0, 255, 0), 2)
-                    cv2.putText(cropGrayImg, 'Side' if sideFace else 'Front',
-                                (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255))
-                    cv2.imshow('Head Pose', cropGrayImg)
-                    cv2.waitKey(1)
-                    if args.saveImg:
-                        cv2.imwrite(
-                            "images/side_"+datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")+".jpg", cropGrayImg)
-
-                if sideFace:
-                    print("Drop non-frontal face")
-                    foundFace = Face(None, None, phash=phash, content=content)
-                    self.foundUser(robotId, videoId, keyframe, foundFace)
-                    continue
-
-                if args.faceRecognitionModel:
-                    benchmark.start("compute_face_descriptor_{}_{}".format(
-                        localProcessCount, index))
-                    shape = sp(img, bb)
-                    rep = np.array(
-                        fr_model.compute_face_descriptor(img, shape))
-                    benchmark.update("compute_face_descriptor_{}_{}".format(
-                        localProcessCount, index))
-                    benchmark.end("compute_face_descriptor_{}_{}".format(
-                        localProcessCount, index))
-                else:
-                    continue
+        # check recent face (if has face rep)
+        recentFaceId = self.getRecentFace(rep)
+        if recentFaceId is None or self.processRecentFace:
+            faceId = recentFaceId if recentFaceId is not None else self.faceId
+            if self.enableClassifier:
+                peopleId, label, confidence = self.classifyFace(rep)
 
                 self.logProcessTime(
-                    "6_feed_network", 'Neural network forward pass', robotId, videoId, keyframe)
+                    "7_predict_face", 'Face Prediction', robotId, videoId, keyframe)
 
-                recentFaceId = self.getRecentFace(rep)
-                if recentFaceId is None or self.processRecentFace:
-                    faceId = recentFaceId if recentFaceId is not None else self.faceId
-                    if self.enableClassifier:
-                        peopleId, label, confidence = self.classifyFace(rep)
+                if confidence and confidence > args.confidenceThreshold:
+                    if peopleId in self.recentPeople:
+                        timeDiff = datetime.now() - \
+                            self.recentPeople[peopleId]['time']
 
-                        self.logProcessTime(
-                            "7_predict_face", 'Face Prediction', robotId, videoId, keyframe)
-
-                        if confidence and confidence > args.confidenceThreshold:
-                            if peopleId in self.recentPeople:
-                                timeDiff = datetime.now() - \
-                                    self.recentPeople[peopleId]['time']
-
-                                if timeDiff.total_seconds() > args.recentFaceTimeout:
-                                    del self.recentPeople[peopleId]
-                                else:
-                                    faceId = self.recentPeople[peopleId]['faceId']
-
-                            self.recentPeople[peopleId] = {
-                                'faceId': faceId,
-                                'time': datetime.now()
-                            }
-
-                            foundFace = Face(
-                                rep, peopleId, faceId, phash, content, label)
+                        if timeDiff.total_seconds() > args.recentFaceTimeout:
+                            del self.recentPeople[peopleId]
                         else:
-                            print("Drop unconfident face classification")
-                            foundFace = self.createUnknownFace(
-                                rep, faceId, phash, content)
-                    else:
-                        if msg.has_key("label"):
-                            label = msg['label']
-                            print("Found face with label: {}".format(label))
-                        else:
-                            label = None
-                        foundFace = Face(rep, None, faceId,
-                                         phash, content, label)
+                            faceId = self.recentPeople[peopleId]['faceId']
 
-                    self.foundUser(robotId, videoId, keyframe, foundFace)
+                    self.recentPeople[peopleId] = {
+                        'faceId': faceId,
+                        'time': datetime.now()
+                    }
+
+                    foundFace = Face(
+                        rep, peopleId, faceId, phash, content, label)
                 else:
-                    continue
-            benchmark.updateAvg("processFrame")
-            print("Finished processing frame {} for {} seconds.".format(
-                keyframe, time.time() - start))
-            self.logProcessTime(
-                            "8_finish_process", 'Finish Processing Face', robotId, videoId, keyframe)
-        except:
-            print(traceback.format_exc())
+                    print("Drop unconfident face classification")
+                    foundFace = self.createUnknownFace(
+                        rep, faceId, phash, content)
+            else:
+                foundFace = Face(rep, None, faceId,
+                                    phash, content, label)
+
+            self.foundUser(robotId, videoId, keyframe, foundFace)
+
+        # benchmark.updateAvg("processFrame")
+        # print("Finished processing frame {} for {} seconds.".format(
+        #     keyframe, time.time() - start))
+        # self.logProcessTime(
+        #                 "8_finish_process", 'Finish Processing Face', robotId, videoId, keyframe)
+
+    # def processFrame(self, msg):
+
+    #     self.processCount += 1
+    #     localProcessCount = self.processCount
+    #     try:
+    #         if args.verbose:
+    #             print("Thread pool size: {}".format(
+    #                 len(reactor.getThreadPool().threads)))
+
+    #         start = time.time()
+    #         dataURL = msg['dataURL']
+
+    #         if msg.has_key("keyframe"):
+    #             keyframe = msg['keyframe']
+    #         else:
+    #             keyframe = start
+
+    #         if msg.has_key("robotId"):
+    #             robotId = msg['robotId']
+    #         else:
+    #             robotId = ""
+
+    #         if msg.has_key("videoId"):
+    #             videoId = msg['videoId']
+    #         else:
+    #             videoId = ""
+
+    #         self.logProcessTime(
+    #             "0_start", "Start processing frame {}".format(keyframe), robotId, videoId, keyframe)
+
+    #         head = "data:image/jpeg;base64,"
+    #         assert(dataURL.startswith(head))
+    #         imgData = base64.b64decode(dataURL[len(head):])
+    #         imgStr = StringIO.StringIO()
+    #         imgStr.write(imgData)
+    #         imgStr.seek(0)
+    #         imgPIL = Image.open(imgStr)
+
+    #         self.logProcessTime(
+    #             "1_open_image", 'Open PIL Image from base64', robotId, videoId, keyframe)
+
+    #         img = np.asarray(imgPIL)
+
+    #         if args.saveImg:
+    #             imgPIL.save(os.path.join(args.imgPath, 'input',
+    #                                      '{}-{}_{}.jpg'.format(robotId, videoId, keyframe)))
+    #             self.logProcessTime(
+    #                 "2_save_image", 'Save input image', robotId, videoId, keyframe)
+
+    #         if args.facePredictor:
+    #             benchmark.start(
+    #                 "cnn_face_detector_{}".format(localProcessCount))
+    #             bbs = cnn_face_detector(img, 0)
+    #             benchmark.update(
+    #                 "cnn_face_detector_{}".format(localProcessCount))
+    #             tag, elasped, rate = benchmark.end(
+    #                 "cnn_face_detector_{}".format(localProcessCount))
+    #             if rate:
+    #                 if len(bbs) > 0:
+    #                     benchmark.logInfo("{} facePredictor_found : {:.2f}, {:.4f}, {}, {}".format(
+    #                         tag, rate, elasped, img.shape, len(bbs)))
+    #                 else:
+    #                     benchmark.logInfo("{} facePredictor_not_found : {:.2f}, {:.4f}, {}, {}".format(
+    #                         tag, rate, elasped, img.shape, len(bbs)))
+
+    #         else:
+    #             benchmark.start("hog_detector_{}".format(localProcessCount))
+    #             bbs = hog_detector(img, 1)
+    #             benchmark.update("hog_detector_{}".format(localProcessCount))
+    #             benchmark.end("hog_detector_{}".format(localProcessCount))
+
+    #         print("Number of faces detected: {}".format(len(bbs)))
+    #         self.logProcessTime(
+    #             "3_face_detected", 'Detector get face bounding box', robotId, videoId, keyframe)
+
+    #         for index, bb in enumerate(bbs):
+    #             if args.facePredictor:
+    #                 print("Face detection confidence = {}".format(bb.confidence))
+    #                 if bb.confidence < 0.8:
+    #                     print("Drop low confidence face detection")
+    #                     continue
+    #                 bb = bb.rect
+
+    #             print("bb width = {}, height = {}".format(
+    #                 bb.width(), bb.height()))
+
+    #             if ((bb.left() < 0) | (bb.right() < 0) | (bb.top() < 0) | (bb.bottom() < 0)):
+    #                 continue
+
+    #             # Create base64 cropped image
+    #             cropImg = img[bb.top():bb.bottom(),
+    #                           bb.left():bb.right()]
+    #             _, jpgImg = cv2.imencode(
+    #                 '.jpg', cv2.cvtColor(cropImg, cv2.COLOR_RGB2BGR))
+    #             content = base64.b64encode(jpgImg)
+    #             self.logProcessTime(
+    #                 "4_crop_image", 'Crop image', robotId, videoId, keyframe)
+
+    #             phash = str(imagehash.phash(Image.fromarray(cropImg)))
+
+    #             grayImg = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+    #             cropGrayImg = cv2.cvtColor(cropImg, cv2.COLOR_RGB2GRAY)
+
+    #             laplacianImg = cv2.Laplacian(cropGrayImg, cv2.CV_64F)
+    #             focus_measure = laplacianImg.var()
+
+    #             print("Focus Measure: {}".format(focus_measure))
+    #             blur = focus_measure < args.focusMeasure
+
+    #             if args.saveImg:
+    #                 laplacianImgPIL = scipy.misc.toimage(laplacianImg)
+    #                 laplacianImgPIL.save(os.path.join(
+    #                     args.imgPath, 'output', 'laplacian_{}-{}_{}-{}_{}_{}.png'.format('blur' if blur else 'sharp', focus_measure, robotId, videoId, keyframe, index + 1)))
+    #                 cropImgPIL = scipy.misc.toimage(cropImg)
+    #                 cropImgPIL.save(os.path.join(
+    #                     args.imgPath, 'output', '{}-{}_{}-{}_{}_{}.png'.format('blur' if blur else 'sharp', focus_measure, robotId, videoId, keyframe, index + 1)))
+    #                 self.logProcessTime(
+    #                     "5_save_crop_image", 'Save Cropped image output', robotId, videoId, keyframe)
+
+    #             if blur:
+    #                 print("Drop blurry face")
+    #                 continue
+
+    #             if bb.width() < args.minFaceResolution or bb.height() < args.minFaceResolution:
+    #                 foundFace = Face(None, None, phash=phash, content=content)
+    #                 self.foundUser(robotId, videoId, keyframe, foundFace)
+    #                 continue
+
+    #             headPose = hpp(grayImg, bb)
+    #             headPoseImage, p1, p2 = hp.pose_estimate(grayImg, headPose)
+    #             headPoseLength = cv2.norm(
+    #                 np.array(p1) - np.array(p2)) / bb.width() * 100
+    #             print("Head Pose Length: {}".format(headPoseLength))
+
+    #             cropGrayImg = headPoseImage[bb.top():bb.bottom(),
+    #                                         bb.left():bb.right()]
+    #             sideFace = headPoseLength > args.sideFaceThreshold
+
+    #             if args.maxThreadPoolSize == 1:
+    #                 eyes = eye_cascade.detectMultiScale(cropGrayImg)
+    #                 for (ex, ey, ew, eh) in eyes:
+    #                     cv2.rectangle(cropGrayImg, (ex, ey),
+    #                                   (ex+ew, ey+eh), (0, 255, 0), 2)
+    #                 cv2.putText(cropGrayImg, 'Side' if sideFace else 'Front',
+    #                             (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255))
+    #                 cv2.imshow('Head Pose', cropGrayImg)
+    #                 cv2.waitKey(1)
+    #                 if args.saveImg:
+    #                     cv2.imwrite(
+    #                         "images/side_"+datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")+".jpg", cropGrayImg)
+
+    #             if sideFace:
+    #                 print("Drop non-frontal face")
+    #                 foundFace = Face(None, None, phash=phash, content=content)
+    #                 self.foundUser(robotId, videoId, keyframe, foundFace)
+    #                 continue
+
+    #             if args.faceRecognitionModel:
+    #                 benchmark.start("compute_face_descriptor_{}_{}".format(
+    #                     localProcessCount, index))
+    #                 shape = sp(img, bb)
+    #                 rep = np.array(
+    #                     fr_model.compute_face_descriptor(img, shape))
+    #                 benchmark.update("compute_face_descriptor_{}_{}".format(
+    #                     localProcessCount, index))
+    #                 benchmark.end("compute_face_descriptor_{}_{}".format(
+    #                     localProcessCount, index))
+    #             else:
+    #                 continue
+
+    #             self.logProcessTime(
+    #                 "6_feed_network", 'Neural network forward pass', robotId, videoId, keyframe)
+
+    #             recentFaceId = self.getRecentFace(rep)
+    #             if recentFaceId is None or self.processRecentFace:
+    #                 faceId = recentFaceId if recentFaceId is not None else self.faceId
+    #                 if self.enableClassifier:
+    #                     peopleId, label, confidence = self.classifyFace(rep)
+
+    #                     self.logProcessTime(
+    #                         "7_predict_face", 'Face Prediction', robotId, videoId, keyframe)
+
+    #                     if confidence and confidence > args.confidenceThreshold:
+    #                         if peopleId in self.recentPeople:
+    #                             timeDiff = datetime.now() - \
+    #                                 self.recentPeople[peopleId]['time']
+
+    #                             if timeDiff.total_seconds() > args.recentFaceTimeout:
+    #                                 del self.recentPeople[peopleId]
+    #                             else:
+    #                                 faceId = self.recentPeople[peopleId]['faceId']
+
+    #                         self.recentPeople[peopleId] = {
+    #                             'faceId': faceId,
+    #                             'time': datetime.now()
+    #                         }
+
+    #                         foundFace = Face(
+    #                             rep, peopleId, faceId, phash, content, label)
+    #                     else:
+    #                         print("Drop unconfident face classification")
+    #                         foundFace = self.createUnknownFace(
+    #                             rep, faceId, phash, content)
+    #                 else:
+    #                     if msg.has_key("label"):
+    #                         label = msg['label']
+    #                         print("Found face with label: {}".format(label))
+    #                     else:
+    #                         label = None
+    #                     foundFace = Face(rep, None, faceId,
+    #                                      phash, content, label)
+
+    #                 self.foundUser(robotId, videoId, keyframe, foundFace)
+    #             else:
+    #                 continue
+    #         benchmark.updateAvg("processFrame")
+    #         print("Finished processing frame {} for {} seconds.".format(
+    #             keyframe, time.time() - start))
+    #         self.logProcessTime(
+    #                         "8_finish_process", 'Finish Processing Face', robotId, videoId, keyframe)
+    #     except:
+    #         print(traceback.format_exc())
 
     def logProcessTime(self, step, logMessage, robotId, videoId, keyframe):
         if args.verbose or benchmark.enable:

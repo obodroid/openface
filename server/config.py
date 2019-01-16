@@ -12,6 +12,8 @@ class Config:
 
     HTTP_PORT = 8000
     WEBSOCKET_PORT = 9000
+    NUM_WORKERS = 4
+    NUM_GPUS = 1
 
     modelDir = os.path.join(fileDir, '..', 'models')
     dlibModelDir = os.path.join(modelDir, 'dlib')
@@ -31,6 +33,7 @@ class Config:
     focusMeasure=20
     sideFaceThreshold=8
     confidenceThreshold=0.2
+    dth=0.2
     classifier="RadiusNeighbors" #choices=['SVC','RadiusNeighbors']
 
     # # For TLS connections
