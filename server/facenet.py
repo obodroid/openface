@@ -323,6 +323,8 @@ class Facenet():
 
                 callback(robotId, videoId, keyframe, rep, phash,content)
 
+            print("Finished processing frame {} for {} seconds.".format(
+                keyframe, time.time() - start))
         except:
             print(traceback.format_exc())
 

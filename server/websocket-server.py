@@ -498,9 +498,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         if face.cluster:
             msg["predict_face_id"] = face.cluster
 
-        if face.cluster == self.faceId:
-            self.faceId += 1
-
         if face.identity:
             msg["predict_name"] = face.label
             msg["predict_people_id"] = face.identity
@@ -578,7 +575,12 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         # check recent face (if has face rep)
         recentFaceId = self.getRecentFace(rep)
         if recentFaceId is None or self.processRecentFace:
-            faceId = recentFaceId if recentFaceId is not None else self.faceId
+            if recentFaceId is not None:
+                faceId = recentFaceId
+            else:
+                faceId = self.faceId
+                self.faceId += 1
+
             if self.enableClassifier:
                 peopleId, label, confidence = self.classifyFace(rep)
 
@@ -603,7 +605,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     foundFace = Face(
                         rep, peopleId, faceId, phash, content, label)
                 else:
-                    print("Drop unconfident face classification")
+                    print("Unconfident face classification")
                     foundFace = self.createUnknownFace(
                         rep, faceId, phash, content)
             else:
@@ -612,11 +614,9 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
             self.foundUser(robotId, videoId, keyframe, foundFace)
 
-        # benchmark.updateAvg("processFrame")
-        # print("Finished processing frame {} for {} seconds.".format(
-        #     keyframe, time.time() - start))
-        # self.logProcessTime(
-        #                 "8_finish_process", 'Finish Processing Face', robotId, videoId, keyframe)
+        benchmark.updateAvg("processFrame")
+        self.logProcessTime(
+                        "8_finish_process", 'Finish Processing Face', robotId, videoId, keyframe)
 
     def logProcessTime(self, step, logMessage, robotId, videoId, keyframe):
         if args.verbose or benchmark.enable:
