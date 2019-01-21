@@ -94,7 +94,7 @@ class MidpointNormalize(Normalize):
 
 
 class Facenet():
-    def __init__(self,workerIndex):
+    def __init__(self, workerIndex):
         self.workerIndex = workerIndex
         self.images = {}
         self.detectQueue = Queue.Queue(maxsize=10)
@@ -122,22 +122,22 @@ class Facenet():
         else:
             self.fr_model = None
 
-    def qput(self,msg,callback):
-        # print("qsize: {}".format(detectQueue.qsize()))
+    def qput(self, msg, callback):
+        print("detectQueue qsize: {}".format(self.detectQueue.qsize()))
         benchmark.startAvg(10.0, "dropframe")
         if self.detectQueue.full():
-            dropFrame = self.detectQueue.get()
+            self.detectQueue.get()
             benchmark.updateAvg("dropframe")
-        self.detectQueue.put([msg,callback])
+        self.detectQueue.put([msg, callback])
 
     def consume(self):
         # TODO need flag to stop benchmark
         while True:
             if not self.detectQueue.empty():
-                msg,callback = self.detectQueue.get()
+                msg, callback = self.detectQueue.get()
                 print("facenetWorker-{}  consume : {}".format(self.workerIndex, msg['keyframe']))
-                self.processFrame(msg,callback)
-            cv2.waitKey(1)
+                self.processFrame(msg, callback)
+            time.sleep(0.001)
         
     def processFrame(self, msg, callback):
         try:
@@ -270,9 +270,7 @@ class Facenet():
 
                 # rule-4: FOUND (detect) >>> low resolution face
                 if bb.width() < args.minFaceResolution or bb.height() < args.minFaceResolution:
-                    # foundFace = Face(None, None, phash=phash, content=content)
-                    # self.foundUser(robotId, videoId, keyframe, foundFace)
-                    callback(robotId, videoId, keyframe, rep, phash,content)
+                    callback(robotId, videoId, keyframe, rep, phash, content)
                     return 
 
                 # rule-5: FOUND (detect) >>> side face
@@ -301,9 +299,7 @@ class Facenet():
 
                 if sideFace:
                     print("found non-frontal face")
-                    # foundFace = Face(None, None, phash=phash, content=content)
-                    # self.foundUser(robotId, videoId, keyframe, foundFace)
-                    callback(robotId, videoId, keyframe, rep, phash,content)
+                    callback(robotId, videoId, keyframe, rep, phash, content)
                     return
 
                 # get face descriptor or representations from face recogntion model
@@ -329,26 +325,7 @@ class Facenet():
             print(traceback.format_exc())
 
     def logProcessTime(self, step, logMessage, robotId, videoId, keyframe):
-        if args.verbose or benchmark.enable:
-            currentTime = time.time()
-            print("Keyframe: {} Step: {} for {} seconds. >> {}".format(
-                keyframe, step, currentTime - self.lastLogTime, logMessage))
-            self.lastLogTime = currentTime
-
-            msg = {
-                "type": "LOG",
-                "robotId": robotId,
-                "videoId": videoId,
-                "keyframe": keyframe,
-                "step": step,
-                "time": datetime.now().isoformat()
-            }
-            # self.pushMessage(msg)
-    
-    # def pushMessage(self, msg):
-    #     self.sendMessage(json.dumps(msg),sync=True)
-
-
+        pass
 
 numWorkers = args.NUM_WORKERS
 numGpus = args.NUM_GPUS
@@ -358,13 +335,10 @@ print("facenet numWorkers : {}".format(numWorkers))
 loadIndex = 0
 
 for i in range(numWorkers):
-    # gpuIndex = i%numGpus
-    # set_gpu(gpuIndex)
-    # print("Load Darknet worker = {} with gpuIndex = {}".format(i,gpuIndex))
     facenetWorkers.append(Facenet(i))
 
-def putLoad(msg,callback):
+def putLoad(msg, callback):
     global loadIndex
     print("putLoad loadIndex = {}".format(loadIndex))
-    facenetWorkers[loadIndex%numWorkers].qput(msg,callback)
+    facenetWorkers[loadIndex % numWorkers].qput(msg, callback)
     loadIndex = loadIndex + 1
