@@ -284,7 +284,7 @@ class Facenet():
                                             bb.left():bb.right()]
                 sideFace = headPoseLength > args.sideFaceThreshold
 
-                if args.maxThreadPoolSize == 1:
+                if args.NUM_WORKERS == 1:
                     eyes = self.eye_cascade.detectMultiScale(cropGrayImg)
                     for (ex, ey, ew, eh) in eyes:
                         cv2.rectangle(cropGrayImg, (ex, ey),

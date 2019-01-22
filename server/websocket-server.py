@@ -171,37 +171,22 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             nullMsg = {"type": "NULL"}
             self.pushMessage(nullMsg)
         elif msg['type'] == "FRAME":
-
             benchmark.startAvg(10.0, "processFrame")
             print("\n on message: FRAME \n")
-            if args.maxThreadPoolSize == 1:
-                # self.processFrame(msg)
-                facenet.putLoad(msg,self.foundFaceCallback)
-                return
 
             from datetime import datetime
             from time import sleep
-
-            # def mockStartThread():  # used for increasing thread pool size
-            #     sleep(5)
-            # if len(reactor.getThreadPool().threads) < args.maxThreadPoolSize:
-            #     reactor.callLater(
-            #         0, lambda: reactor.callInThread(mockStartThread))
 
             now = datetime.now()
             time_diff = now - \
                 datetime.strptime(msg['time'], '%Y-%m-%dT%H:%M:%S.%fZ')
             print("frame latency: {}".format(time_diff))
 
-            facenet.putLoad(msg,self.foundFaceCallback)
-
-            # reactor.callLater(
-            #         0, lambda: reactor.callInThread(self.processFrame, msg))
-            # if time_diff.seconds < 1:
-            #     reactor.callLater(
-            #         0, lambda: reactor.callInThread(self.processFrame, msg))
-            # else:
-            #     print("drop delayed frame")
+            if time_diff.seconds < 1:
+                facenet.putLoad(msg, self.foundFaceCallback)
+            else:
+                print("drop delayed frame")
+                
         elif msg['type'] == "PROCESS_RECENT_FACE":
             print("process recent face: {}".format(msg['val']))
             self.processRecentFace = msg['val']

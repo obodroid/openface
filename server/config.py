@@ -27,7 +27,6 @@ class Config:
     faceRecognitionModel = os.path.join(dlibModelDir, 'dlib_face_recognition_resnet_model_v1.dat')
     
     recentFaceTimeout=10
-    maxThreadPoolSize=10
     minFaceResolution=150
     loosenFactor=1.0
     focusMeasure=20
