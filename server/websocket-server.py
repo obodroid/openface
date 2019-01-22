@@ -129,7 +129,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
         self.le = LabelEncoder().fit(self.people.keys())
 
-        self.unknowns = {}
         self.faceId = 1
         self.processCount = 0
 
@@ -186,7 +185,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 facenet.putLoad(msg, self.foundFaceCallback)
             else:
                 print("drop delayed frame")
-                
+
         elif msg['type'] == "PROCESS_RECENT_FACE":
             print("process recent face: {}".format(msg['val']))
             self.processRecentFace = msg['val']
@@ -245,7 +244,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         for jsImage in jsImages:
             h = jsImage['hash'].encode('ascii', 'ignore')
             self.images[h] = Face(np.array(jsImage['rep']),
-                                  jsImage['identity'])
+                                  identity=jsImage['identity'])
 
         label_ids = [int(o['people_id']) for o in jsPeople]
         labels = [str(o['label']) for o in jsPeople]
@@ -332,7 +331,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             class_counts = np.bincount(y_indices)
             cond = [True if class_counts[a] > 1 else False for a in y_indices]
 
-            X_cv = np.extract(np.tile(cond,(X.shape[1],1)).transpose(), X).reshape(-1, X.shape[1])
+            X_cv = np.extract(
+                np.tile(cond, (X.shape[1], 1)).transpose(), X).reshape(-1, X.shape[1])
             y_cv = np.extract(cond, y)
 
             print("Training Classifier on {} labeled images.".format(
@@ -461,11 +461,6 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
         return recentFaceId
 
-    def createUnknownFace(self, rep, cluster, phash, content):
-        face = Face(rep, None, cluster, phash, content)
-        self.unknowns[phash] = face
-        return face
-
     def foundUser(self, robotId, videoId, keyframe, face):
         print("found people id: {}".format(face.identity))
 
@@ -477,6 +472,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             "phash": face.phash,
             "content": face.content,
             "rep": face.rep.tolist() if face.rep is not None else None,
+            "bbox": face.bbox,
             "time": datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'),
         }
 
@@ -548,17 +544,16 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
         return peopleId, label, confidence
 
-    def foundFaceCallback(self, robotId, videoId, keyframe, rep, phash, content, label=None):
+    def foundFaceCallback(self, robotId, videoId, keyframe, foundFace):
         print("foundFaceCallback : {}".format(keyframe))
 
-        if rep is None:
+        if foundFace.rep is None:
             # found face but cannot recognize user
-            foundFace = Face(rep, None, phash=phash, content=content)
             self.foundUser(robotId, videoId, keyframe, foundFace)
             return
 
         # check recent face (if has face rep)
-        recentFaceId = self.getRecentFace(rep)
+        recentFaceId = self.getRecentFace(foundFace.rep)
         if recentFaceId is None or self.processRecentFace:
             if recentFaceId is not None:
                 faceId = recentFaceId
@@ -567,7 +562,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 self.faceId += 1
 
             if self.enableClassifier:
-                peopleId, label, confidence = self.classifyFace(rep)
+                peopleId, label, confidence = self.classifyFace(foundFace.rep)
 
                 self.logProcessTime(
                     "7_predict_face", 'Face Prediction', robotId, videoId, keyframe)
@@ -587,21 +582,17 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                         'time': datetime.now()
                     }
 
-                    foundFace = Face(
-                        rep, peopleId, faceId, phash, content, label)
+                    foundFace.identity = peopleId
+                    foundFace.label = label
                 else:
                     print("Unconfident face classification")
-                    foundFace = self.createUnknownFace(
-                        rep, faceId, phash, content)
-            else:
-                foundFace = Face(rep, None, faceId,
-                                    phash, content, label)
 
+            foundFace.cluster = faceId
             self.foundUser(robotId, videoId, keyframe, foundFace)
 
         benchmark.updateAvg("processFrame")
         self.logProcessTime(
-                        "8_finish_process", 'Finish Processing Face', robotId, videoId, keyframe)
+            "8_finish_process", 'Finish Processing Face', robotId, videoId, keyframe)
 
     def logProcessTime(self, step, logMessage, robotId, videoId, keyframe):
         if args.verbose or benchmark.enable:
@@ -619,9 +610,10 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 "time": datetime.now().isoformat()
             }
             self.pushMessage(msg)
-    
+
     def pushMessage(self, msg):
-        self.sendMessage(json.dumps(msg),sync=True)
+        self.sendMessage(json.dumps(msg), sync=True)
+
 
 def main(reactor):
     observer = log.startLogging(sys.stdout)

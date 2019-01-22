@@ -141,7 +141,6 @@ class Facenet():
         
     def processFrame(self, msg, callback):
         try:
-            # receive message
             start = time.time()
             dataURL = msg['dataURL']
 
@@ -160,10 +159,18 @@ class Facenet():
             else:
                 videoId = ""
             
-            videoSerial = "{}-{}".format(robotId,videoId)
-            frameSerial = "{}_{}".format(videoSerial,keyframe)
+            videoSerial = "{}-{}".format(robotId, videoId)
+            frameSerial = "{}_{}".format(videoSerial, keyframe)
 
-            rep = None
+            if msg.has_key("label"):
+                label = msg['label']
+            else:
+                label = None
+
+            if msg.has_key("bbox"):
+                bbox = msg['bbox']
+            else:
+                bbox = None
 
             self.logProcessTime(
                 "0_start", "Start processing frame {}".format(frameSerial), robotId, videoId, keyframe)
@@ -225,12 +232,15 @@ class Facenet():
                         continue
                     bb = bb.rect
 
-                print("bb width = {}, height = {}".format(
-                    bb.width(), bb.height()))
-
                 # rule-2: Drop >>> if face image dimension corrupted
                 if ((bb.left() < 0) | (bb.right() < 0) | (bb.top() < 0) | (bb.bottom() < 0)):
                     continue
+
+                if bbox is not None:
+                    bbox['x'] += bb.left()
+                    bbox['y'] += bb.top()
+                    bbox['w'] = bb.width()
+                    bbox['h'] = bb.height()
 
                 # cropped face image
                 cropImg = npImg[bb.top():bb.bottom(),
@@ -268,9 +278,11 @@ class Facenet():
                     print("Drop blurry face")
                     continue
 
+                foundFace = Face(None, phash=phash, content=content, label=label, bbox=bbox)
+
                 # rule-4: FOUND (detect) >>> low resolution face
                 if bb.width() < args.minFaceResolution or bb.height() < args.minFaceResolution:
-                    callback(robotId, videoId, keyframe, rep, phash, content)
+                    callback(robotId, videoId, keyframe, foundFace)
                     return 
 
                 # rule-5: FOUND (detect) >>> side face
@@ -299,7 +311,7 @@ class Facenet():
 
                 if sideFace:
                     print("found non-frontal face")
-                    callback(robotId, videoId, keyframe, rep, phash, content)
+                    callback(robotId, videoId, keyframe, foundFace)
                     return
 
                 # get face descriptor or representations from face recogntion model
@@ -307,7 +319,7 @@ class Facenet():
                     benchmark.start("compute_face_descriptor_{}_{}".format(
                         frameSerial, index))
                     shape = self.sp(npImg, bb)
-                    rep = np.array(
+                    foundFace.rep = np.array(
                         self.fr_model.compute_face_descriptor(npImg, shape))
                     benchmark.update("compute_face_descriptor_{}_{}".format(
                         frameSerial, index))
@@ -317,7 +329,7 @@ class Facenet():
                 self.logProcessTime(
                     "6_feed_network", 'Neural network forward pass', robotId, videoId, keyframe)
 
-                callback(robotId, videoId, keyframe, rep, phash,content)
+                callback(robotId, videoId, keyframe, foundFace)
 
             print("Finished processing frame {} for {} seconds.".format(
                 keyframe, time.time() - start))

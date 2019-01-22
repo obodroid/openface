@@ -20,13 +20,14 @@ import json
 
 class Face:
 
-    def __init__(self, rep, identity, cluster=None, phash=None, content=None, label=None):
+    def __init__(self, rep, identity=None, cluster=None, phash=None, content=None, label=None, bbox=None):
         self.rep = rep
         self.identity = identity
         self.cluster = cluster
         self.phash = phash
         self.content = content
         self.label = label
+        self.bbox = bbox
 
     def convertToJson(self):
         jsonObj = json.dumps(self, default=lambda o: o.__dict__)
