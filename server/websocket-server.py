@@ -612,7 +612,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             self.pushMessage(msg)
 
     def pushMessage(self, msg):
-        self.sendMessage(json.dumps(msg), sync=True)
+        reactor.callFromThread(self.sendMessage, json.dumps(msg), sync=True)
 
 
 def main(reactor):
