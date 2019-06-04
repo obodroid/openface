@@ -178,8 +178,7 @@ class Facenet():
             # construct numpy array of PIL image from base64 str
             head = "data:image/jpeg;base64,"
             assert(dataURL.startswith(head))
-            dataURL = dataURL[len(head):].encode()
-            imgData = base64.b64decode(dataURL[2:-1])
+            imgData = base64.b64decode(dataURL[len(head):])
             imgStr = StringIO.StringIO()
             imgStr.write(imgData)
             imgStr.seek(0)
