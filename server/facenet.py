@@ -247,7 +247,7 @@ class Facenet():
                               bb.left():bb.right()]
                 _, jpgImg = cv2.imencode(
                     '.jpg', cv2.cvtColor(cropImg, cv2.COLOR_RGB2BGR))
-                content = base64.b64encode(jpgImg )# Create base64 cropped image
+                content = base64.b64encode(jpgImg) # Create base64 cropped image
                 self.logProcessTime(
                     "4_crop_image", 'Crop image', robotId, videoId, keyframe)
 
