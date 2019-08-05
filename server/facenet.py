@@ -77,6 +77,10 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from matplotlib.colors import Normalize
 
+#import for use Face++
+import requests
+import json
+
 import benchmark
 import openface
 import config
@@ -92,6 +96,56 @@ class MidpointNormalize(Normalize):
         x, y = [self.vmin, self.midpoint, self.vmax], [0, 0.5, 1]
         return np.ma.masked_array(np.interp(value, x, y))
 
+class Facepp():
+   def __init__(self, myKey, mySecret):
+	   #request import requests
+	   self.myKey = myKey
+	   self.mySecret = mySecret
+
+   def findMaxValueInDict(self, myDict):
+   	   inverse = [(value, key) for key, value in myDict.items()]
+   	   return max(inverse)[1]
+
+   def detect(self, picBase64, face):
+	   
+       attributes="gender,age,ethnicity,mouthstatus,eyestatus,facequality,emotion,headpose"
+	   
+	   #url for contact with Face++ detect
+       http_url = 'https://api-us.faceplusplus.com/facepp/v3/detect'
+
+	   #get values from Face++ 
+       json_resp = requests.post(http_url,
+      				data = { 
+          				'api_key': self.myKey,
+          				'api_secret': self.mySecret,
+          				'image_base64': picBase64,
+          				'return_attributes': attributes
+     					}
+				     )	   
+	   #transfrom json text to dictionary
+       obj_content= json.loads(vars(json_resp)['_content'])
+       dict_attributes = obj_content['faces'][0]['attributes']
+	
+	   #age value
+       face.ageFacepp = dict_attributes['age'].values()[0]
+	   #gender value (Male or Female)
+       face.genderFacepp = dict_attributes['gender'].values()[0]
+	   #ethnicity value (Asian ,White, Black)
+       face.ethnicityFacepp = dict_attributes['ethnicity'].values()[0]
+	   #emotion (anger ,disgust, fear, happiness, neutral, sadness, surprise)
+       face.emotionFacepp = self.findMaxValueInDict(dict_attributes['emotion'])
+	   #mouth (surgical_mask_or_respirator, other_occlusion, close, open)
+       face.mouthFacepp = self.findMaxValueInDict(dict_attributes['mouthstatus'])
+	   #eye status (occlusion, no_glass_eye_open, normal_glass_eye_close, normal_glass_eye_open, dark_glasses, no_glass_eye_close)
+       face.lefteyeStatusFacepp = self.findMaxValueInDict(dict_attributes['eyestatus']['left_eye_status'])
+       face.righteyeStatusFacepp = self.findMaxValueInDict(dict_attributes['eyestatus']['right_eye_status'])
+	   #if threshold is less than values, this picture can comparable.
+       faceth = self.findMaxValueInDict(dict_attributes['facequality'])
+       if faceth == 'value':
+           face.facequalityFacepp = 'high'
+       else:
+           face.facequalityFacepp = 'low'
+       face.headposeFacepp = dict_attributes['headpose']
 
 class Facenet():
     def __init__(self, workerIndex):
@@ -279,6 +333,12 @@ class Facenet():
                     continue
 
                 foundFace = Face(None, phash=phash, content=content, label=label, bbox=bbox)
+
+                #request data from facepp
+                key_APIFace = "eoYSb8GL-d54k3_C37K7XfHxLcLfNoug"
+                secret_APIFace = "x6eLXTXf1ORSXlJeh9Zpcf9t5-HCadn-"          
+                facepp1 = Facepp(key_APIFace, secret_APIFace)
+                facepp1.detect(dataURL, foundFace)
 
                 # rule-4: FOUND (detect) >>> low resolution face
                 if bb.width() < args.minFaceResolution or bb.height() < args.minFaceResolution:

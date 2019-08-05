@@ -474,6 +474,15 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             "rep": face.rep.tolist() if face.rep is not None else None,
             "bbox": face.bbox,
             "time": datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'),
+            "ageFacepp": face.ageFacepp, 
+            "genderFacepp": face.genderFacepp, 
+            "ethnicityFacepp": face.ethnicityFacepp, 
+            "emotionFacepp": face.emotionFacepp, 
+            "mouthFacepp": face.mouthFacepp, 
+            "lefteyeStatusFacepp": face.lefteyeStatusFacepp, 
+            "righteyeStatusFacepp": face.righteyeStatusFacepp, 
+            "facequalityFacepp": face.facequalityFacepp,
+            "headposeFacepp": face.headposeFacepp
         }
 
         if face.cluster:
