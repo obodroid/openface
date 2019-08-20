@@ -99,8 +99,13 @@ class MidpointNormalize(Normalize):
 class Facepp():
    def __init__(self, myKey, mySecret):
 	   #request import requests
-	   self.myKey = myKey
-	   self.mySecret = mySecret
+       self.myKey = myKey
+       self.mySecret = mySecret
+       self.path = "./../../data/imageType/"
+       self.mapIndexHeadPoseDict = {'1': 'topLeft', '2': 'topMid', '3': 'topRight',
+									'4': 'midLeft', '5': 'midMid', '6': 'midRight',
+									'7': 'botLeft', '8': 'botMid', '9': 'botRight',
+									'0': 'unknown'}
 
    def findMaxValueInDict(self, myDict):
    	   inverse = [(value, key) for key, value in myDict.items()]
@@ -112,40 +117,112 @@ class Facepp():
 	   
 	   #url for contact with Face++ detect
        http_url = 'https://api-us.faceplusplus.com/facepp/v3/detect'
+       try:
+            #get values from Face++ 
+            json_resp = requests.post(http_url,
+                            data = { 
+                                'api_key': self.myKey,
+                                'api_secret': self.mySecret,
+                                'image_base64': picBase64,
+                                'return_attributes': attributes
+                                }
+                            )	   
+            #transfrom json text to dictionary
+            obj_content= json.loads(vars(json_resp)['_content'])
+            dict_attributes = obj_content['faces'][0]['attributes']
+            
+            #age value
+            face.ageFacepp = dict_attributes['age'].values()[0]
+            #gender value (Male or Female)
+            face.genderFacepp = dict_attributes['gender'].values()[0]
+            #ethnicity value (Asian ,White, Black)
+            face.ethnicityFacepp = dict_attributes['ethnicity'].values()[0]
+            #emotion (anger ,disgust, fear, happiness, neutral, sadness, surprise)
+            face.emotionFacepp = self.findMaxValueInDict(dict_attributes['emotion'])
+            #mouth (surgical_mask_or_respirator, other_occlusion, close, open)
+            face.mouthFacepp = self.findMaxValueInDict(dict_attributes['mouthstatus'])
+            #eye status (occlusion, no_glass_eye_open, normal_glass_eye_close, normal_glass_eye_open, dark_glasses, no_glass_eye_close)
+            face.lefteyeStatusFacepp = self.findMaxValueInDict(dict_attributes['eyestatus']['left_eye_status'])
+            face.righteyeStatusFacepp = self.findMaxValueInDict(dict_attributes['eyestatus']['right_eye_status'])
+            #if threshold is less than values, this picture can comparable.
+            faceth = self.findMaxValueInDict(dict_attributes['facequality'])
+            if faceth == 'value':
+                face.facequalityFacepp = 'high'
+            else:
+                face.facequalityFacepp = 'low'
+            face.headposeFacepp = dict_attributes['headpose']
+       except:
+            face.ageFacepp = None
+            face.genderFacepp = None
+            face.ethnicityFacepp = None
+            face.emotionFacepp = None
+            face.mouthFacepp = None
+            face.lefteyeStatusFacepp = None
+            face.righteyeStatusFacepp = None
+            face.facequalityFacepp = None
+            face.headposeFacepp = None
+            pass
 
-	   #get values from Face++ 
-       json_resp = requests.post(http_url,
-      				data = { 
-          				'api_key': self.myKey,
-          				'api_secret': self.mySecret,
-          				'image_base64': picBase64,
-          				'return_attributes': attributes
-     					}
-				     )	   
-	   #transfrom json text to dictionary
-       obj_content= json.loads(vars(json_resp)['_content'])
-       dict_attributes = obj_content['faces'][0]['attributes']
-	
-	   #age value
-       face.ageFacepp = dict_attributes['age'].values()[0]
-	   #gender value (Male or Female)
-       face.genderFacepp = dict_attributes['gender'].values()[0]
-	   #ethnicity value (Asian ,White, Black)
-       face.ethnicityFacepp = dict_attributes['ethnicity'].values()[0]
-	   #emotion (anger ,disgust, fear, happiness, neutral, sadness, surprise)
-       face.emotionFacepp = self.findMaxValueInDict(dict_attributes['emotion'])
-	   #mouth (surgical_mask_or_respirator, other_occlusion, close, open)
-       face.mouthFacepp = self.findMaxValueInDict(dict_attributes['mouthstatus'])
-	   #eye status (occlusion, no_glass_eye_open, normal_glass_eye_close, normal_glass_eye_open, dark_glasses, no_glass_eye_close)
-       face.lefteyeStatusFacepp = self.findMaxValueInDict(dict_attributes['eyestatus']['left_eye_status'])
-       face.righteyeStatusFacepp = self.findMaxValueInDict(dict_attributes['eyestatus']['right_eye_status'])
-	   #if threshold is less than values, this picture can comparable.
-       faceth = self.findMaxValueInDict(dict_attributes['facequality'])
-       if faceth == 'value':
-           face.facequalityFacepp = 'high'
+   def save9typeOfFace(self, nameImage, inputImage, indexFace):
+		# index = 1 (top-left), index = 2 (top-mid), index = 3 (top-right)
+		# index = 4 (mid-left), index = 5 (mid-mid), index = 6 (mid-right)
+		# index = 7 (bottom-left), index = 8 (bottom-mid), index = 9 (bottom-right)
+
+		mapIndexFaceandFloderDict = {'1': 'topLeft', '2': 'topMid', '3': 'topRight',
+									'4': 'midLeft', '5': 'midMid', '6': 'midRight',
+									'7': 'botLeft', '8': 'botMid', '9': 'botRight',
+									'0': 'unknown'}
+		cv2.imwrite(os.path.join(self.path+mapIndexFaceandFloderDict[indexFace] , nameImage), inputImage)
+
+   def found9typeOfFace(self, face):
+       	# index = 1 (top-left), index = 2 (top-mid), index = 3 (top-right)
+		# index = 4 (mid-left), index = 5 (mid-mid), index = 6 (mid-right)
+		# index = 7 (bottom-left), index = 8 (bottom-mid), index = 9 (bottom-right)
+	#   global indexFace
+       if face.headposeFacepp != None:
+            if face.headposeFacepp['yaw_angle'] > 14:
+                if face.headposeFacepp['pitch_angle'] < -9:
+                    indexFace = '1'
+                elif face.headposeFacepp['yaw_angle'] > 40 and face.headposeFacepp['pitch_angle'] > 0 and face.headposeFacepp['pitch_angle'] < 10 and abs(face.headposeFacepp['roll_angle']) < 10:
+                    indexFace = '4'
+                elif face.headposeFacepp['yaw_angle'] > 40 and abs(face.headposeFacepp['pitch_angle']) < 5 and face.headposeFacepp['roll_angle'] < -18.5:
+					indexFace = '7'
+                elif face.headposeFacepp['yaw_angle'] > 25 and face.headposeFacepp['pitch_angle']<2 and face.headposeFacepp['pitch_angle']> -9 and face.headposeFacepp['roll_angle'] >= 1:
+                    indexFace = '1'
+                elif face.headposeFacepp['pitch_angle'] > 10:
+                    indexFace = '7'
+                else:
+                    indexFace = '4'
+            elif face.headposeFacepp['yaw_angle'] < -11.5:
+                if face.headposeFacepp['pitch_angle'] < -7:
+                    indexFace = '3'
+                elif face.headposeFacepp['pitch_angle'] < 12 and face.headposeFacepp['pitch_angle'] > 6.5 and abs(face.headposeFacepp['roll_angle']) < 20:
+                    indexFace = '6'
+                elif face.headposeFacepp['pitch_angle'] > 6.5:
+                    indexFace = '9'
+                elif face.headposeFacepp['yaw_angle'] < -25 and face.headposeFacepp['pitch_angle'] < 0 and face.headposeFacepp['pitch_angle'] >-9 and face.headposeFacepp['roll_angle'] < -13:
+                    indexFace = '3'
+                elif face.headposeFacepp['yaw_angle'] < -25 and face.headposeFacepp['pitch_angle'] < 12 and face.headposeFacepp['pitch_angle'] >0 and face.headposeFacepp['roll_angle'] < -9:
+                    indexFace = '3'
+                elif face.headposeFacepp['pitch_angle'] > 0 and face.headposeFacepp['pitch_angle'] <9 and face.headposeFacepp['roll_angle'] > 11:
+                    indexFace = '9'
+                else:
+                    indexFace = '6'
+            elif face.headposeFacepp['yaw_angle'] <= 15 and face.headposeFacepp['yaw_angle'] >= -11.5:
+                if face.headposeFacepp['pitch_angle'] < -9:
+                    indexFace = '2'
+                elif face.headposeFacepp['pitch_angle'] > 10:
+                    indexFace = '8'
+                elif abs(face.headposeFacepp['roll_angle']) <= 10:
+                    indexFace = '5'
+            else:
+                indexFace = '0'
        else:
-           face.facequalityFacepp = 'low'
-       face.headposeFacepp = dict_attributes['headpose']
+            indexFace = '0'
+        
+       return indexFace
+
+
 
 class Facenet():
     def __init__(self, workerIndex):
@@ -288,6 +365,7 @@ class Facenet():
 
                 # rule-2: Drop >>> if face image dimension corrupted
                 if ((bb.left() < 0) | (bb.right() < 0) | (bb.top() < 0) | (bb.bottom() < 0)):
+                    print("rule-2")
                     continue
 
                 if bbox is not None:
@@ -334,41 +412,49 @@ class Facenet():
 
                 foundFace = Face(None, phash=phash, content=content, label=label, bbox=bbox)
 
-                #request data from facepp
-                key_APIFace = "eoYSb8GL-d54k3_C37K7XfHxLcLfNoug"
-                secret_APIFace = "x6eLXTXf1ORSXlJeh9Zpcf9t5-HCadn-"          
-                facepp1 = Facepp(key_APIFace, secret_APIFace)
+                #request data from facepp        
+                facepp1 = Facepp(args.key_APIFace, args.secret_APIFace)
                 facepp1.detect(dataURL, foundFace)
+                indexFace = facepp1.found9typeOfFace(foundFace)
+                print( 'indexFace = {}'.format(indexFace) )
+                sideFace = False
+                if foundFace.headposeFacepp != None:
+                    if indexFace == '5':
+                            sideFace = False
+                    else:
+                            sideFace = True
+                print("sideFace: {}".format(sideFace))
 
                 # rule-4: FOUND (detect) >>> low resolution face
                 if bb.width() < args.minFaceResolution or bb.height() < args.minFaceResolution:
                     callback(robotId, videoId, keyframe, foundFace)
                     return 
 
-                # rule-5: FOUND (detect) >>> side face
-                headPose = self.hpp(grayImg, bb)
-                headPoseImage, p1, p2 = hp.pose_estimate(grayImg, headPose)
-                headPoseLength = cv2.norm(
-                    np.array(p1) - np.array(p2)) / bb.width() * 100
-                print("Head Pose Length: {}".format(headPoseLength))
+                # # rule-5: FOUND (detect) >>> side face
+                # headPose = self.hpp(grayImg, bb)
+                # headPoseImage, p1, p2 = hp.pose_estimate(grayImg, headPose)
+                # headPoseLength = cv2.norm(
+                #     np.array(p1) - np.array(p2)) / bb.width() * 100
+                # print("Head Pose Length: {}".format(headPoseLength))
 
-                cropGrayImg = headPoseImage[bb.top():bb.bottom(),
-                                            bb.left():bb.right()]
-                sideFace = headPoseLength > args.sideFaceThreshold
+                # cropGrayImg = headPoseImage[bb.top():bb.bottom(),
+                #                             bb.left():bb.right()]
+                # sideFace = headPoseLength > args.sideFaceThreshold
+                # print("sideFace: {}".format(sideFace))
 
-                if args.NUM_WORKERS == 1:
-                    eyes = self.eye_cascade.detectMultiScale(cropGrayImg)
-                    for (ex, ey, ew, eh) in eyes:
-                        cv2.rectangle(cropGrayImg, (ex, ey),
-                                      (ex+ew, ey+eh), (0, 255, 0), 2)
-                    cv2.putText(cropGrayImg, 'Side' if sideFace else 'Front',
-                                (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255))
-                    cv2.imshow('Head Pose', cropGrayImg)
-                    cv2.waitKey(1)
-                    if args.saveImg:
-                        cv2.imwrite(
-                            "images/side_"+datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")+".jpg", cropGrayImg)
-
+                # if args.NUM_WORKERS == 1:
+                #     eyes = self.eye_cascade.detectMultiScale(cropGrayImg)
+                #     for (ex, ey, ew, eh) in eyes:
+                #         cv2.rectangle(cropGrayImg, (ex, ey),
+                #                       (ex+ew, ey+eh), (0, 255, 0), 2)
+                #     cv2.putText(cropGrayImg, 'Side' if sideFace else 'Front',
+                #                 (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255))
+                #     cv2.imshow('Head Pose', cropGrayImg)
+                #     cv2.waitKey(1)
+                #     if args.saveImg:
+                #         cv2.imwrite(
+                #             "images/side_"+datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")+".jpg", cropGrayImg)
+                
                 if sideFace:
                     print("found non-frontal face")
                     callback(robotId, videoId, keyframe, foundFace)
