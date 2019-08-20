@@ -27,7 +27,7 @@ class Config:
     faceRecognitionModel = os.path.join(dlibModelDir, 'dlib_face_recognition_resnet_model_v1.dat')
     
     recentFaceTimeout=10
-    minFaceResolution=150
+    minFaceResolution=100
     loosenFactor=1.0
     focusMeasure=20
     sideFaceThreshold=8
@@ -39,6 +39,10 @@ class Config:
     # tls_crt = os.path.join(fileDir, 'tls', 'server.crt')
     # tls_key = os.path.join(fileDir, 'tls', 'server.key')
     
+    # For conect with Facepp
+    key_APIFace = "eoYSb8GL-d54k3_C37K7XfHxLcLfNoug"
+    secret_APIFace = "x6eLXTXf1ORSXlJeh9Zpcf9t5-HCadn-"
+      
 class DevConfig(Config):
     DEBUG = True
     verbose = True
