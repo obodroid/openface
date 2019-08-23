@@ -102,10 +102,10 @@ class Facepp():
        self.myKey = myKey
        self.mySecret = mySecret
        self.path = "./../../data/imageType/"
-       self.mapIndexHeadPoseDict = {'1': 'topLeft', '2': 'topMid', '3': 'topRight',
-									'4': 'midLeft', '5': 'midMid', '6': 'midRight',
-									'7': 'botLeft', '8': 'botMid', '9': 'botRight',
-									'0': 'unknown'}
+       self.mapIndexHeadPoseDict = {'1': 'top-Left headpose', '2': 'top-Mid headpose', '3': 'top-Right headpose',
+									'4': 'mid-Left headpose', '5': 'mid-Mid headpose', '6': 'mid-Right headpose',
+									'7': 'bot-Left headpose', '8': 'bot-Mid headpose', '9': 'bot-Right headpose',
+									'0': 'unknown headpose'}
 
    def findMaxValueInDict(self, myDict):
    	   inverse = [(value, key) for key, value in myDict.items()]
@@ -161,18 +161,14 @@ class Facepp():
             face.righteyeStatusFacepp = None
             face.facequalityFacepp = None
             face.headposeFacepp = None
+            face.indexfaceFacepp = None
             pass
 
    def save9typeOfFace(self, nameImage, inputImage, indexFace):
 		# index = 1 (top-left), index = 2 (top-mid), index = 3 (top-right)
 		# index = 4 (mid-left), index = 5 (mid-mid), index = 6 (mid-right)
 		# index = 7 (bottom-left), index = 8 (bottom-mid), index = 9 (bottom-right)
-
-		mapIndexFaceandFloderDict = {'1': 'topLeft', '2': 'topMid', '3': 'topRight',
-									'4': 'midLeft', '5': 'midMid', '6': 'midRight',
-									'7': 'botLeft', '8': 'botMid', '9': 'botRight',
-									'0': 'unknown'}
-		cv2.imwrite(os.path.join(self.path+mapIndexFaceandFloderDict[indexFace] , nameImage), inputImage)
+		cv2.imwrite(os.path.join(self.path+self.mapIndexFaceandFloderDict[indexFace] , nameImage), inputImage)
 
    def found9typeOfFace(self, face):
        	# index = 1 (top-left), index = 2 (top-mid), index = 3 (top-right)
@@ -219,8 +215,7 @@ class Facepp():
                 indexFace = '0'
        else:
             indexFace = '0'
-        
-       return indexFace
+       face.indexfaceFacepp = self.mapIndexHeadPoseDict[indexFace]
 
 
 
@@ -415,11 +410,11 @@ class Facenet():
                 #request data from facepp        
                 facepp1 = Facepp(args.key_APIFace, args.secret_APIFace)
                 facepp1.detect(dataURL, foundFace)
-                indexFace = facepp1.found9typeOfFace(foundFace)
-                print( 'indexFace = {}'.format(indexFace) )
-                sideFace = False
+                facepp1.found9typeOfFace(foundFace)
+                print( 'indexFace = {}'.format(foundFace.indexfaceFacepp) )
+                sideFace = True
                 if foundFace.headposeFacepp != None:
-                    if indexFace == '5':
+                    if foundFace.indexfaceFacepp == 'mid-Mid headpose':
                             sideFace = False
                     else:
                             sideFace = True

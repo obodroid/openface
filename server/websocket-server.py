@@ -482,7 +482,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             "lefteyeStatusFacepp": face.lefteyeStatusFacepp, 
             "righteyeStatusFacepp": face.righteyeStatusFacepp, 
             "facequalityFacepp": face.facequalityFacepp,
-            "headposeFacepp": face.headposeFacepp
+            "headposeFacepp": face.headposeFacepp,
+            "indexfaceFacepp": face.indexfaceFacepp,
         }
 
         if face.cluster:
