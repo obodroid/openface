@@ -16,11 +16,11 @@
 # limitations under the License.
 
 import json
-
+from facepp import Facepp
 
 class Face:
 
-    def __init__(self, rep, identity=None, cluster=None, phash=None, content=None, label=None, bbox=None):
+    def __init__(self, rep, identity=None, cluster=None, phash=None, content=None, label=None, bbox=None, facepp=Facepp()):
         self.rep = rep
         self.identity = identity
         self.cluster = cluster
@@ -28,6 +28,7 @@ class Face:
         self.content = content
         self.label = label
         self.bbox = bbox
+        self.facepp = facepp
 
     def convertToJson(self):
         jsonObj = json.dumps(self, default=lambda o: o.__dict__)
