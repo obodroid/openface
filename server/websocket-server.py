@@ -430,15 +430,18 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         plt.title('Validation Accuracy')
         plt.show()
 
-    def getRecentFace(self, rep):
+    def getRecentFace(self, rep, search):
         recentFaceId = None
 
         def isValid(face):
             timeDiff = datetime.now() - face['time']
             return timeDiff.total_seconds() < args.recentFaceTimeout
 
-        self.recentFaces = filter(isValid, self.recentFaces)
-
+        if search:
+            self.recentFaces = [] 
+        else:
+            self.recentFaces = filter(isValid, self.recentFaces)
+            
         for recentFace in self.recentFaces:
             d = rep - recentFace['rep']
             drep = np.dot(d, d)
@@ -544,7 +547,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
         return peopleId, label, confidence
 
-    def foundFaceCallback(self, robotId, videoId, keyframe, foundFace):
+    def foundFaceCallback(self, robotId, videoId, keyframe, foundFace, search = False):
         print("foundFaceCallback : {}".format(keyframe))
 
         if foundFace.rep is None:
@@ -553,7 +556,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             return
 
         # check recent face (if has face rep)
-        recentFaceId = self.getRecentFace(foundFace.rep)
+        recentFaceId = self.getRecentFace(foundFace.rep,search)
         if recentFaceId is None or self.processRecentFace:
             if recentFaceId is not None:
                 faceId = recentFaceId

@@ -171,7 +171,8 @@ class Facenet():
                 bbox = msg['bbox']
             else:
                 bbox = None
-
+            if msg.has_key("search"):
+                searchFace = msg['search']
             self.logProcessTime(
                 "0_start", "Start processing frame {}".format(frameSerial), robotId, videoId, keyframe)
 
@@ -219,9 +220,9 @@ class Facenet():
                 benchmark.end("hog_detector_{}".format(frameSerial))
 
             print("Number of faces detected: {}".format(len(bbs)))
+
             self.logProcessTime(
                 "3_face_detected", "Detector get face bounding box {}".format(frameSerial), robotId, videoId, keyframe)
-
             # iterate all detected faces to check upon conditions
             for index, bb in enumerate(bbs):
                 # rule-1: Drop >>> low face detection confidence
@@ -329,7 +330,10 @@ class Facenet():
                 self.logProcessTime(
                     "6_feed_network", 'Neural network forward pass', robotId, videoId, keyframe)
 
-                callback(robotId, videoId, keyframe, foundFace)
+                if searchFace:
+                    callback(robotId, videoId, keyframe, foundFace, searchFace)
+                else:
+                    callback(robotId, videoId, keyframe, foundFace)
 
             print("Finished processing frame {} for {} seconds.".format(
                 keyframe, time.time() - start))
