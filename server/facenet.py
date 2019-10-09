@@ -173,6 +173,8 @@ class Facenet():
                 bbox = None
             if msg.has_key("search"):
                 searchFace = msg['search']
+            else:
+                searchFace = None
             self.logProcessTime(
                 "0_start", "Start processing frame {}".format(frameSerial), robotId, videoId, keyframe)
 
@@ -331,7 +333,7 @@ class Facenet():
                     "6_feed_network", 'Neural network forward pass', robotId, videoId, keyframe)
 
                 if searchFace:
-                    callback(robotId, videoId, keyframe, foundFace, searchFace)
+                    callback(robotId, videoId, keyframe, foundFace,True)
                 else:
                     callback(robotId, videoId, keyframe, foundFace)
 

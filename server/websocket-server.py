@@ -430,17 +430,14 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         plt.title('Validation Accuracy')
         plt.show()
 
-    def getRecentFace(self, rep, search):
+    def getRecentFace(self, rep):
         recentFaceId = None
 
         def isValid(face):
             timeDiff = datetime.now() - face['time']
             return timeDiff.total_seconds() < args.recentFaceTimeout
 
-        if search:
-            self.recentFaces = [] 
-        else:
-            self.recentFaces = filter(isValid, self.recentFaces)
+        self.recentFaces = filter(isValid, self.recentFaces)
             
         for recentFace in self.recentFaces:
             d = rep - recentFace['rep']
@@ -464,7 +461,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
         return recentFaceId
 
-    def foundUser(self, robotId, videoId, keyframe, face):
+    def foundUser(self, robotId, videoId, keyframe, face, search = False):
         print("found people id: {}".format(face.identity))
 
         msg = {
@@ -477,6 +474,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             "rep": face.rep.tolist() if face.rep is not None else None,
             "bbox": face.bbox,
             "time": datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'),
+            "search":search
         }
 
         if face.cluster:
@@ -556,8 +554,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             return
 
         # check recent face (if has face rep)
-        recentFaceId = self.getRecentFace(foundFace.rep,search)
-        if recentFaceId is None or self.processRecentFace:
+        recentFaceId = self.getRecentFace(foundFace.rep)
+        if recentFaceId is None or self.processRecentFace or search:
             if recentFaceId is not None:
                 faceId = recentFaceId
             else:
@@ -591,7 +589,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     print("Unconfident face classification")
 
             foundFace.cluster = faceId
-            self.foundUser(robotId, videoId, keyframe, foundFace)
+            self.foundUser(robotId, videoId, keyframe, foundFace,search)
 
         benchmark.updateAvg("processFrame")
         self.logProcessTime(
