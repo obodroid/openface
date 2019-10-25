@@ -484,6 +484,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             "facequalityFacepp": face.facepp.facequality,
             "headposeFacepp": face.facepp.headpose,
             "indexfaceFacepp": face.facepp.indexFace,
+            "faceComment": face.faceComment,
         }
 
         if face.cluster:

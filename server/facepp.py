@@ -22,7 +22,7 @@ import config
 args = config.loadConfig()
 
 class Facepp():
-   def __init__(self):
+    def __init__(self):
         #request import requests
         self.myKey = args.keyFacepp
         self.mySecret = args.secretFacepp
@@ -41,13 +41,14 @@ class Facepp():
         self.facequality = None
         self.headpose = None
         self.indexFace = None
+        self.comment = [2,5]
 
 
-   def findMaxValueInDict(self, myDict):
+    def findMaxValueInDict(self, myDict):
    	   inverse = [(value, key) for key, value in myDict.items()]
    	   return max(inverse)[1]
 
-   def detect(self, picBase64):
+    def detect(self, picBase64):
         attributes="gender,age,ethnicity,mouthstatus,eyestatus,facequality,emotion,headpose"
         
         #url for contact with Face++ detect
@@ -90,13 +91,13 @@ class Facepp():
         except:
             pass
 
-   def save9typeOfFace(self, nameImage, inputImage):
+    def save9typeOfFace(self, nameImage, inputImage):
 		# index = 1 (top-left), index = 2 (top-mid), index = 3 (top-right)
 		# index = 4 (mid-left), index = 5 (mid-mid), index = 6 (mid-right)
 		# index = 7 (bottom-left), index = 8 (bottom-mid), index = 9 (bottom-right)
 		cv2.imwrite(os.path.join(self.path + self.mapIndexHeadPoseDict[self.indexFace] , nameImage), inputImage)
 
-   def found9typeOfFace(self):
+    def found9typeOfFace(self):
        	# index = 1 (top-left), index = 2 (top-mid), index = 3 (top-right)
 		# index = 4 (mid-left), index = 5 (mid-mid), index = 6 (mid-right)
 		# index = 7 (bottom-left), index = 8 (bottom-mid), index = 9 (bottom-right)
@@ -143,6 +144,30 @@ class Facepp():
             indexFace = '0'
         self.indexFace = self.mapIndexHeadPoseDict[indexFace]
     
+    def faceSuggestion(self):
+        if self.indexFace == None:
+            print("no indexFace")
+        else:
+            numFace = self.mapIndexHeadPoseDict.keys()[self.mapIndexHeadPoseDict.values().index(self.indexFace)] 
+            
+        if numFace == '1':
+            self.comment = [-1,1]
+        elif numFace == '2':
+            self.comment = [0,1]
+        elif numFace == '3':
+            self.comment = [1,1]
+        elif numFace == '4':
+            self.comment = [-1,0]
+        elif numFace == '6':
+            self.comment = [1,0]
+        elif numFace == '7':
+            self.comment = [-1,-1]
+        elif numFace == '8':
+            self.comment = [0,-1]
+        elif numFace == '9':
+            self.comment = [1,-1]
+        elif numFace == '5':
+            self.comment = [0,0]            
 
 
 

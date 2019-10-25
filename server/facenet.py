@@ -279,15 +279,21 @@ class Facenet():
                     self.logProcessTime(
                         "5_save_crop_image", 'Save Cropped image output', robotId, videoId, keyframe)
 
+                foundFace = Face(None ,label=label, phash=phash, content=content, bbox=bbox)
+
                 if blur:
                     print("Drop blurry face")
+                    foundFace.faceComment = [2,3]
+                    callback(robotId, videoId, keyframe, foundFace)
                     continue
 
                 facepp1 = Facepp()
-                foundFace = Face(None, phash=phash, content=content, label=label, bbox=bbox,facepp=facepp1)
+                foundFace.facepp =facepp1
                 #request data from facepp        
                 foundFace.facepp.detect(dataURL)
                 foundFace.facepp.found9typeOfFace()
+                foundFace.facepp.faceSuggestion()
+                foundFace.faceComment = foundFace.facepp.comment
                 sideFace = True
                 if foundFace.facepp.headpose != None:
                     if foundFace.facepp.indexFace == 'mid-Mid headpose':
@@ -298,6 +304,7 @@ class Facenet():
 
                 # rule-4: FOUND (detect) >>> low resolution face
                 if bb.width() < args.minFaceResolution or bb.height() < args.minFaceResolution:
+                    foundFace.faceComment = [2,4]
                     callback(robotId, videoId, keyframe, foundFace)
                     return 
 
@@ -327,7 +334,6 @@ class Facenet():
                 #             "images/side_"+datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")+".jpg", cropGrayImg)
                 
                 if sideFace:
-                    print("found non-frontal face")
                     callback(robotId, videoId, keyframe, foundFace)
                     return
 

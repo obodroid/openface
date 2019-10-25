@@ -29,6 +29,7 @@ class Face:
         self.label = label
         self.bbox = bbox
         self.facepp = facepp
+        self.faceComment = ""
 
     def convertToJson(self):
         jsonObj = json.dumps(self, default=lambda o: o.__dict__)
