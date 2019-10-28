@@ -100,17 +100,10 @@ class MidpointNormalize(Normalize):
 class Facenet():
     def __init__(self, workerIndex):
         self.workerIndex = workerIndex
-        self.images = {}
         self.detectQueue = Queue.Queue(maxsize=10)
         self.detectWorker = threading.Thread(target=self.consume)
         self.detectWorker.setDaemon(True)
         self.detectWorker.start()
-        self.recentFaces = []
-        self.recentPeople = {}
-        self.processRecentFace = False
-        self.enableClassifier = True
-        self.training = True
-        self.lastLogTime = time.time()
 
         self.sp = dlib.shape_predictor(args.shapePredictor)
         self.hpp = dlib.shape_predictor(args.headPosePredictor)
