@@ -228,7 +228,7 @@ class Facenet():
 
             # iterate all detected faces to check upon conditions
             for index, bb in enumerate(bbs):
-                # rule-1: Drop >>> low face detection confidence
+                # rule-1: check low face detection confidence
                 if args.facePredictor:
                     print("Face detection confidence = {}".format(bb.confidence))
                     if bb.confidence < 0.8:
@@ -236,9 +236,9 @@ class Facenet():
                         continue
                     bb = bb.rect
 
-                # rule-2: Drop >>> if face image dimension corrupted
+                # rule-2: check if face image dimension is corrupted
                 if ((bb.left() < 0) | (bb.right() < 0) | (bb.top() < 0) | (bb.bottom() < 0)):
-                    print("rule-2")
+                    print("Drop corrupted face detection dimension")
                     continue
 
                 if bbox is not None:
@@ -258,6 +258,26 @@ class Facenet():
 
                 phash = str(imagehash.phash(Image.fromarray(cropImg)))
 
+                foundFace = Face(None ,label=label, phash=phash, content=content, bbox=bbox)
+
+                # call face++ api
+                foundFace.facepp = Facepp()
+                foundFace.facepp.detect(dataURL)
+                foundFace.facepp.found9typeOfFace()
+                foundFace.facepp.faceSuggestion()
+                foundFace.faceComment = foundFace.facepp.comment
+                
+                if foundFace.facepp.headpose != None:
+                    if foundFace.facepp.indexFace == 'mid-Mid headpose':
+                        sideFace = False
+                    else:
+                        sideFace = True
+                    print("sideFace: {}".format(sideFace))
+                else:
+                    print("found face without head pose")
+                    callback(robotId, videoId, keyframe, foundFace)
+                    continue
+
                 # change to gray image to check blurry and headpose
                 grayImg = cv2.cvtColor(npImg, cv2.COLOR_RGB2GRAY)
                 cropGrayImg = cv2.cvtColor(cropImg, cv2.COLOR_RGB2GRAY)
@@ -265,7 +285,7 @@ class Facenet():
                 laplacianImg = cv2.Laplacian(cropGrayImg, cv2.CV_64F)
                 focus_measure = laplacianImg.var()
 
-                # rule-3: drop blurry face
+                # rule-3: check blurry face
                 print("Focus Measure: {}".format(focus_measure))
                 blur = focus_measure < args.focusMeasure
 
@@ -279,61 +299,46 @@ class Facenet():
                     self.logProcessTime(
                         "5_save_crop_image", 'Save Cropped image output', robotId, videoId, keyframe)
 
-                foundFace = Face(None ,label=label, phash=phash, content=content, bbox=bbox)
-
                 if blur:
-                    print("Drop blurry face")
+                    print("found blurry face")
                     foundFace.faceComment = [2,3]
                     callback(robotId, videoId, keyframe, foundFace)
                     continue
 
-                facepp1 = Facepp()
-                foundFace.facepp =facepp1
-                #request data from facepp        
-                foundFace.facepp.detect(dataURL)
-                foundFace.facepp.found9typeOfFace()
-                foundFace.facepp.faceSuggestion()
-                foundFace.faceComment = foundFace.facepp.comment
-                sideFace = True
-                if foundFace.facepp.headpose != None:
-                    if foundFace.facepp.indexFace == 'mid-Mid headpose':
-                            sideFace = False
-                    else:
-                            sideFace = True
-                print("sideFace: {}".format(sideFace))
-
-                # rule-4: FOUND (detect) >>> low resolution face
+                # rule-4: check low resolution face
                 if bb.width() < args.minFaceResolution or bb.height() < args.minFaceResolution:
                     foundFace.faceComment = [2,4]
                     callback(robotId, videoId, keyframe, foundFace)
                     return 
 
-                # # rule-5: FOUND (detect) >>> side face
-                # headPose = self.hpp(grayImg, bb)
-                # headPoseImage, p1, p2 = hp.pose_estimate(grayImg, headPose)
-                # headPoseLength = cv2.norm(
-                #     np.array(p1) - np.array(p2)) / bb.width() * 100
-                # print("Head Pose Length: {}".format(headPoseLength))
+                # rule-5: check side face
+                if False: # Disable head pose estimator
+                    headPose = self.hpp(grayImg, bb)
+                    headPoseImage, p1, p2 = hp.pose_estimate(grayImg, headPose)
+                    headPoseLength = cv2.norm(
+                        np.array(p1) - np.array(p2)) / bb.width() * 100
+                    print("Head Pose Length: {}".format(headPoseLength))
 
-                # cropGrayImg = headPoseImage[bb.top():bb.bottom(),
-                #                             bb.left():bb.right()]
-                # sideFace = headPoseLength > args.sideFaceThreshold
-                # print("sideFace: {}".format(sideFace))
+                    cropGrayImg = headPoseImage[bb.top():bb.bottom(),
+                                                bb.left():bb.right()]
+                    sideFace = headPoseLength > args.sideFaceThreshold
+                    print("sideFace: {}".format(sideFace))
 
-                # if args.NUM_WORKERS == 1:
-                #     eyes = self.eye_cascade.detectMultiScale(cropGrayImg)
-                #     for (ex, ey, ew, eh) in eyes:
-                #         cv2.rectangle(cropGrayImg, (ex, ey),
-                #                       (ex+ew, ey+eh), (0, 255, 0), 2)
-                #     cv2.putText(cropGrayImg, 'Side' if sideFace else 'Front',
-                #                 (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255))
-                #     cv2.imshow('Head Pose', cropGrayImg)
-                #     cv2.waitKey(1)
-                #     if args.saveImg:
-                #         cv2.imwrite(
-                #             "images/side_"+datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")+".jpg", cropGrayImg)
+                    if args.NUM_WORKERS == 1:
+                        eyes = self.eye_cascade.detectMultiScale(cropGrayImg)
+                        for (ex, ey, ew, eh) in eyes:
+                            cv2.rectangle(cropGrayImg, (ex, ey),
+                                        (ex+ew, ey+eh), (0, 255, 0), 2)
+                        cv2.putText(cropGrayImg, 'Side' if sideFace else 'Front',
+                                    (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255))
+                        cv2.imshow('Head Pose', cropGrayImg)
+                        cv2.waitKey(1)
+                        if args.saveImg:
+                            cv2.imwrite(
+                                "images/side_"+datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")+".jpg", cropGrayImg)
                 
                 if sideFace:
+                    print("found non-frontal face")
                     callback(robotId, videoId, keyframe, foundFace)
                     return
 

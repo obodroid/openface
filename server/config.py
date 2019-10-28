@@ -29,7 +29,7 @@ class Config:
     recentFaceTimeout=10
     minFaceResolution=100
     loosenFactor=1.0
-    focusMeasure=570
+    focusMeasure=200
     sideFaceThreshold=8
     confidenceThreshold=0.2
     dth=0.2
@@ -39,7 +39,7 @@ class Config:
     # tls_crt = os.path.join(fileDir, 'tls', 'server.crt')
     # tls_key = os.path.join(fileDir, 'tls', 'server.key')
     
-    # For conect with Facepp
+    # For connect with Facepp
     keyFacepp = "eoYSb8GL-d54k3_C37K7XfHxLcLfNoug"
     secretFacepp = "x6eLXTXf1ORSXlJeh9Zpcf9t5-HCadn-"
       
