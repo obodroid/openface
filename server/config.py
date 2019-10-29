@@ -12,7 +12,7 @@ class Config:
 
     HTTP_PORT = 8000
     WEBSOCKET_PORT = 9000
-    NUM_WORKERS = 8
+    NUM_WORKERS = 1
     NUM_GPUS = 1
 
     modelDir = os.path.join(fileDir, '..', 'models')

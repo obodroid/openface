@@ -306,8 +306,8 @@ class Facenet():
                                       (ex+ew, ey+eh), (0, 255, 0), 2)
                     cv2.putText(cropGrayImg, 'Side' if sideFace else 'Front',
                                 (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255))
-                    cv2.imshow('Head Pose', cropGrayImg)
-                    cv2.waitKey(1)
+                    # cv2.imshow('Head Pose', cropGrayImg)
+                    # cv2.waitKey(1)
                     if args.saveImg:
                         cv2.imwrite(
                             "images/side_"+datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")+".jpg", cropGrayImg)
