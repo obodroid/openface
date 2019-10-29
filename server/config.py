@@ -29,8 +29,8 @@ class Config:
     recentFaceTimeout=10
     minFaceResolution=100
     loosenFactor=1.0
-    focusMeasure=50
-    sideFaceThreshold=8
+    focusMeasure=20
+    sideFaceThreshold=15
     confidenceThreshold=0.2
     dth=0.2
     classifier="RadiusNeighbors" #choices=['SVC','RadiusNeighbors']

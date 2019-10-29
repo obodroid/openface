@@ -258,24 +258,6 @@ class Facenet():
 
                 foundFace = Face(None ,label=label, phash=phash, content=content, bbox=bbox)
 
-                # call face++ api
-                foundFace.facepp = Facepp()
-                foundFace.facepp.detect(dataURL)
-                foundFace.facepp.found9typeOfFace()
-                foundFace.facepp.faceSuggestion()
-                foundFace.faceComment = foundFace.facepp.comment
-                
-                if foundFace.facepp.headpose != None:
-                    if foundFace.facepp.indexFace == 'mid-Mid headpose':
-                        sideFace = False
-                    else:
-                        sideFace = True
-                    print("sideFace: {}".format(sideFace))
-                elif not skipQualityCheck:
-                    print("found face without head pose")
-                    callback(robotId, videoId, keyframe, foundFace)
-                    continue
-
                 # change to gray image to check blurry and headpose
                 grayImg = cv2.cvtColor(npImg, cv2.COLOR_RGB2GRAY)
                 cropGrayImg = cv2.cvtColor(cropImg, cv2.COLOR_RGB2GRAY)
@@ -311,33 +293,55 @@ class Facenet():
                     return 
 
                 # rule-5: check side face
-                if False: # Disable head pose estimator
-                    headPose = self.hpp(grayImg, bb)
-                    headPoseImage, p1, p2 = hp.pose_estimate(grayImg, headPose)
-                    headPoseLength = cv2.norm(
-                        np.array(p1) - np.array(p2)) / bb.width() * 100
-                    print("Head Pose Length: {}".format(headPoseLength))
+                headPose = self.hpp(grayImg, bb)
+                headPoseImage, p1, p2 = hp.pose_estimate(grayImg, headPose)
+                headPoseLength = cv2.norm(
+                    np.array(p1) - np.array(p2)) / bb.width() * 100
+                print("Head Pose Length: {}".format(headPoseLength))
 
-                    cropGrayImg = headPoseImage[bb.top():bb.bottom(),
-                                                bb.left():bb.right()]
-                    sideFace = headPoseLength > args.sideFaceThreshold
-                    print("sideFace: {}".format(sideFace))
+                cropGrayImg = headPoseImage[bb.top():bb.bottom(),
+                                            bb.left():bb.right()]
+                sideFace = headPoseLength > args.sideFaceThreshold
+                print("sideFace by head pose estimator: {}".format(sideFace))
 
-                    if args.NUM_WORKERS == 1:
-                        eyes = self.eye_cascade.detectMultiScale(cropGrayImg)
-                        for (ex, ey, ew, eh) in eyes:
-                            cv2.rectangle(cropGrayImg, (ex, ey),
-                                        (ex+ew, ey+eh), (0, 255, 0), 2)
-                        cv2.putText(cropGrayImg, 'Side' if sideFace else 'Front',
-                                    (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255))
-                        cv2.imshow('Head Pose', cropGrayImg)
-                        cv2.waitKey(1)
-                        if args.saveImg:
-                            cv2.imwrite(
-                                "images/side_"+datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")+".jpg", cropGrayImg)
+                if args.NUM_WORKERS == 1:
+                    eyes = self.eye_cascade.detectMultiScale(cropGrayImg)
+                    for (ex, ey, ew, eh) in eyes:
+                        cv2.rectangle(cropGrayImg, (ex, ey),
+                                    (ex+ew, ey+eh), (0, 255, 0), 2)
+                    cv2.putText(cropGrayImg, 'Side' if sideFace else 'Front',
+                                (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255))
+                    cv2.imshow('Head Pose', cropGrayImg)
+                    cv2.waitKey(1)
+                    if args.saveImg:
+                        cv2.imwrite(
+                            "images/side_"+datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")+".jpg", cropGrayImg)
                 
                 if sideFace and not skipQualityCheck:
-                    print("found non-frontal face")
+                    print("found non-frontal face by head pose estimator")
+                    callback(robotId, videoId, keyframe, foundFace)
+                    return
+
+                # call face++ api
+                foundFace.facepp = Facepp()
+                foundFace.facepp.detect(dataURL)
+                foundFace.facepp.found9typeOfFace()
+                foundFace.facepp.faceSuggestion()
+                foundFace.faceComment = foundFace.facepp.comment
+                
+                if foundFace.facepp.headpose != None:
+                    if foundFace.facepp.indexFace == 'mid-Mid headpose':
+                        sideFace = False
+                    else:
+                        sideFace = True
+                    print("sideFace by Face++: {}".format(sideFace))
+                elif not skipQualityCheck:
+                    print("found face without head pose")
+                    callback(robotId, videoId, keyframe, foundFace)
+                    continue
+
+                if sideFace and not skipQualityCheck:
+                    print("found non-frontal face by Face++")
                     callback(robotId, videoId, keyframe, foundFace)
                     return
 
