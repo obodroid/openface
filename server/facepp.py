@@ -102,46 +102,27 @@ class Facepp():
 		# index = 4 (mid-left), index = 5 (mid-mid), index = 6 (mid-right)
 		# index = 7 (bottom-left), index = 8 (bottom-mid), index = 9 (bottom-right)
         indexFace = '0'
+
         if self.headpose != None:
-            if self.headpose['yaw_angle'] > 14:
-                if self.headpose['pitch_angle'] < -9:
-                    indexFace = '1'
-                elif self.headpose['yaw_angle'] > 40 and self.headpose['pitch_angle'] > 0 and self.headpose['pitch_angle'] < 10 and abs(self.headpose['roll_angle']) < 10:
-                    indexFace = '4'
-                elif self.headpose['yaw_angle'] > 40 and abs(self.headpose['pitch_angle']) < 5 and self.headpose['roll_angle'] < -18.5:
-					indexFace = '7'
-                elif self.headpose['yaw_angle'] > 25 and self.headpose['pitch_angle'] < 2 and self.headpose['pitch_angle'] > -9 and self.headpose['roll_angle'] >= 1:
-                    indexFace = '1'
-                elif self.headpose['pitch_angle'] > 10:
-                    indexFace = '7'
-                else:
-                    indexFace = '4'
-            elif self.headpose['yaw_angle'] < -11.5:
-                if self.headpose['pitch_angle'] < -7:
-                    indexFace = '3'
-                elif self.headpose['pitch_angle'] < 12 and self.headpose['pitch_angle'] > 6.5 and abs(self.headpose['roll_angle']) < 20:
-                    indexFace = '6'
-                elif self.headpose['pitch_angle'] > 6.5:
-                    indexFace = '9'
-                elif self.headpose['yaw_angle'] < -25 and self.headpose['pitch_angle'] < 0 and self.headpose['pitch_angle'] > -9 and self.headpose['roll_angle'] < -13:
-                    indexFace = '3'
-                elif self.headpose['yaw_angle'] < -25 and self.headpose['pitch_angle'] < 12 and self.headpose['pitch_angle'] > 0 and self.headpose['roll_angle'] < -9:
-                    indexFace = '3'
-                elif self.headpose['pitch_angle'] > 0 and self.headpose['pitch_angle'] < 9 and self.headpose['roll_angle'] > 11:
-                    indexFace = '9'
-                else:
-                    indexFace = '6'
-            elif self.headpose['yaw_angle'] <= 15 and self.headpose['yaw_angle'] >= -11.5:
-                if self.headpose['pitch_angle'] < -9:
-                    indexFace = '2'
-                elif self.headpose['pitch_angle'] > 10:
-                    indexFace = '8'
-                elif abs(self.headpose['roll_angle']) <= 10:
-                    indexFace = '5'
+            if self.headpose['yaw_angle'] > 15:
+                yaw = 1 # left
+            elif self.headpose['yaw_angle'] < -15:
+                yaw = 3 # right
             else:
+                yaw = 2 # mid
+
+            if self.headpose['pitch_angle'] < -15:
+                pitch = 1 # top
+            elif self.headpose['pitch_angle'] > 15:
+                pitch = 3 # bottom
+            else:
+                pitch = 2 # mid
+
+            indexFace = str(3 * (pitch - 1) + yaw)
+
+            if abs(self.headpose['roll_angle']) > 10:
                 indexFace = '0'
-        else:
-            indexFace = '0'
+
         self.indexFace = self.mapIndexHeadPoseDict[indexFace]
     
     def faceSuggestion(self):
