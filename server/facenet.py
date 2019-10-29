@@ -306,6 +306,7 @@ class Facenet():
                 # rule-4: check low resolution face
                 if bb.width() < args.minFaceResolution or bb.height() < args.minFaceResolution:
                     foundFace.faceComment = [2,4]
+                    print("found low resolution face")
                     callback(robotId, videoId, keyframe, foundFace)
                     return 
 
