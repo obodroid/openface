@@ -182,6 +182,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             print("frame latency: {}".format(time_diff))
 
             if time_diff.seconds < 1:
+                msg['skipQualityCheck'] = self.processRecentFace
                 facenet.putLoad(msg, self.foundFaceCallback)
             else:
                 print("drop delayed frame")

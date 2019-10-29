@@ -169,6 +169,11 @@ class Facenet():
             else:
                 bbox = None
 
+            if msg.has_key("skipQualityCheck"):
+                skipQualityCheck = msg['skipQualityCheck']
+            else:
+                skipQualityCheck = False
+
             self.logProcessTime(
                 "0_start", "Start processing frame {}".format(frameSerial), robotId, videoId, keyframe)
 
@@ -240,7 +245,7 @@ class Facenet():
                     bbox['w'] = bb.width()
                     bbox['h'] = bb.height()
 
-                # cropped face image
+                # crop face image
                 cropImg = npImg[bb.top():bb.bottom(),
                               bb.left():bb.right()]
                 _, jpgImg = cv2.imencode(
@@ -266,7 +271,7 @@ class Facenet():
                     else:
                         sideFace = True
                     print("sideFace: {}".format(sideFace))
-                else:
+                elif not skipQualityCheck:
                     print("found face without head pose")
                     callback(robotId, videoId, keyframe, foundFace)
                     continue
@@ -292,7 +297,7 @@ class Facenet():
                     self.logProcessTime(
                         "5_save_crop_image", 'Save Cropped image output', robotId, videoId, keyframe)
 
-                if blur:
+                if blur and not skipQualityCheck:
                     print("found blurry face")
                     foundFace.faceComment = [2,3]
                     callback(robotId, videoId, keyframe, foundFace)
@@ -330,7 +335,7 @@ class Facenet():
                             cv2.imwrite(
                                 "images/side_"+datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")+".jpg", cropGrayImg)
                 
-                if sideFace:
+                if sideFace and not skipQualityCheck:
                     print("found non-frontal face")
                     callback(robotId, videoId, keyframe, foundFace)
                     return
