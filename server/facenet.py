@@ -323,11 +323,12 @@ class Facenet():
                     return
 
                 # call face++ api
-                foundFace.facepp = Facepp()
-                foundFace.facepp.detect(dataURL)
-                foundFace.facepp.found9typeOfFace()
-                foundFace.facepp.faceSuggestion()
-                foundFace.faceComment = foundFace.facepp.comment
+                if args.enableFacepp:
+                    foundFace.facepp = Facepp()
+                    foundFace.facepp.detect(dataURL)
+                    foundFace.facepp.found9typeOfFace()
+                    foundFace.facepp.faceSuggestion()
+                    foundFace.faceComment = foundFace.facepp.comment
                 
                 if foundFace.facepp.headpose != None:
                     if foundFace.facepp.indexFace == 'mid-Mid headpose':
@@ -335,7 +336,7 @@ class Facenet():
                     else:
                         sideFace = True
                     print("sideFace by Face++: {}".format(sideFace))
-                elif not skipQualityCheck:
+                elif args.enableFacepp and not skipQualityCheck:
                     print("found face without head pose")
                     callback(robotId, videoId, keyframe, foundFace)
                     continue
