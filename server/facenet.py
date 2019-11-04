@@ -256,7 +256,7 @@ class Facenet():
 
                 phash = str(imagehash.phash(Image.fromarray(cropImg)))
 
-                foundFace = Face(None ,label=label, phash=phash, content=content, bbox=bbox)
+                foundFace = Face(None, phash=phash, content=content, bbox=bbox)
 
                 # change to gray image to check blurry and headpose
                 grayImg = cv2.cvtColor(npImg, cv2.COLOR_RGB2GRAY)
@@ -361,6 +361,8 @@ class Facenet():
                 self.logProcessTime(
                     "6_feed_network", 'Neural network forward pass', robotId, videoId, keyframe)
 
+                # assign label only when embedding is successfully computed
+                foundFace.label = label
                 callback(robotId, videoId, keyframe, foundFace)
 
             print("Finished processing frame {} for {} seconds.".format(
