@@ -28,7 +28,7 @@ class Config:
     
     recentFaceTimeout=10
     minFaceResolution=100
-    loosenFactor=1.0
+    loosenFactor=0.75
     focusMeasure=20
     sideFaceThreshold=15
     confidenceThreshold=0.2
