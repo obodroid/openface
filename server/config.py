@@ -12,7 +12,7 @@ class Config:
 
     HTTP_PORT = 8000
     WEBSOCKET_PORT = 9000
-    NUM_WORKERS = 1
+    NUM_WORKERS = 4
     NUM_GPUS = 1
 
     modelDir = os.path.join(fileDir, '..', 'models')
@@ -30,7 +30,7 @@ class Config:
     minFaceResolution=10
     loosenFactor=1.0
     focusMeasure=150
-    sideFaceThreshold=20
+    sideFaceThreshold=25
     confidenceThreshold=0.2
     dth=0.2
     classifier="RadiusNeighbors" #choices=['SVC','RadiusNeighbors']

@@ -461,7 +461,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
         return recentFaceId
 
-    def foundUser(self, robotId, videoId, keyframe, face, search = False):
+    def foundUser(self, robotId, videoId, keyframe, face, purpose=None):
         print("found people id: {}".format(face.identity))
 
         msg = {
@@ -474,7 +474,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             "rep": face.rep.tolist() if face.rep is not None else None,
             "bbox": face.bbox,
             "time": datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'),
-            "search":search
+            "purpose":purpose
         }
 
         if face.cluster:
@@ -545,14 +545,18 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
         return peopleId, label, confidence
 
-    def foundFaceCallback(self, robotId, videoId, keyframe, foundFace, search = False):
+    def foundFaceCallback(self, robotId, videoId, keyframe, foundFace, purpose = False):
         print("foundFaceCallback : {}".format(keyframe))
+
+        if purpose:
+            if purpose == 'search':
+                search = True
 
         if foundFace.rep is None:
             # found face but cannot recognize user
             self.foundUser(robotId, videoId, keyframe, foundFace)
             return
-
+        
         # check recent face (if has face rep)
         recentFaceId = self.getRecentFace(foundFace.rep)
         if recentFaceId is None or self.processRecentFace or search:
@@ -589,7 +593,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     print("Unconfident face classification")
 
             foundFace.cluster = faceId
-            self.foundUser(robotId, videoId, keyframe, foundFace,search)
+            self.foundUser(robotId, videoId, keyframe, foundFace,purpose)
 
         benchmark.updateAvg("processFrame")
         self.logProcessTime(
