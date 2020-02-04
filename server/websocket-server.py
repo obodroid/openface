@@ -439,7 +439,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             return timeDiff.total_seconds() < args.recentFaceTimeout
 
         self.recentFaces = filter(isValid, self.recentFaces)
-
+            
         for recentFace in self.recentFaces:
             d = rep - recentFace['rep']
             drep = np.dot(d, d)
@@ -462,7 +462,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
         return recentFaceId
 
-    def foundUser(self, robotId, videoId, keyframe, face):
+    def foundUser(self, robotId, videoId, keyframe, face, purpose=None):
         print("found people id: {}".format(face.identity))
 
         msg = {
@@ -474,6 +474,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             "content": face.content,
             "rep": face.rep.tolist() if face.rep is not None else None,
             "bbox": face.bbox,
+            "purpose":purpose,
             "time": datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'),
             "ageFacepp": face.facepp.age, 
             "genderFacepp": face.facepp.gender, 
@@ -556,17 +557,21 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
         return peopleId, label, confidence
 
-    def foundFaceCallback(self, robotId, videoId, keyframe, foundFace):
+    def foundFaceCallback(self, robotId, videoId, keyframe, foundFace, purpose = None):
         print("foundFaceCallback : {}".format(keyframe))
+     
+        if purpose:
+            if purpose == 'search':
+                search = True
 
         if foundFace.rep is None:
             # found face but cannot recognize user
             self.foundUser(robotId, videoId, keyframe, foundFace)
             return
-
+        
         # check recent face (if has face rep)
         recentFaceId = self.getRecentFace(foundFace.rep)
-        if recentFaceId is None or self.processRecentFace:
+        if recentFaceId is None or self.processRecentFace or search:
             if recentFaceId is not None:
                 faceId = recentFaceId
             else:
@@ -600,7 +605,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     print("Unconfident face classification")
 
             foundFace.cluster = faceId
-            self.foundUser(robotId, videoId, keyframe, foundFace)
+            self.foundUser(robotId, videoId, keyframe, foundFace, purpose)
 
         benchmark.updateAvg("processFrame")
         self.logProcessTime(

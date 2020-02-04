@@ -173,6 +173,11 @@ class Facenet():
                 skipQualityCheck = msg['skipQualityCheck']
             else:
                 skipQualityCheck = False
+            
+            if msg.has_key("purpose"):
+                purpose = msg['purpose']
+            else:
+                purpose = None
 
             self.logProcessTime(
                 "0_start", "Start processing frame {}".format(frameSerial), robotId, videoId, keyframe)
@@ -221,12 +226,12 @@ class Facenet():
                 benchmark.end("hog_detector_{}".format(frameSerial))
 
             print("Number of faces detected: {}".format(len(bbs)))
+
             self.logProcessTime(
                 "3_face_detected", "Detector get face bounding box {}".format(frameSerial), robotId, videoId, keyframe)
-
             # iterate all detected faces to check upon conditions
             for index, bb in enumerate(bbs):
-                # rule-1: check low face detection confidence
+                # rule-1: Drop >>> low face detection confidence
                 if args.facePredictor:
                     print("Face detection confidence = {}".format(bb.confidence))
                     if bb.confidence < 0.8:
@@ -234,7 +239,7 @@ class Facenet():
                         continue
                     bb = bb.rect
 
-                # rule-2: check if face image dimension is corrupted
+                # rule-2: Drop >>> if face image dimension corrupted
                 if ((bb.left() < 0) | (bb.right() < 0) | (bb.top() < 0) | (bb.bottom() < 0)):
                     print("Drop corrupted face detection dimension")
                     continue
@@ -245,7 +250,7 @@ class Facenet():
                     bbox['w'] = bb.width()
                     bbox['h'] = bb.height()
 
-                # crop face image
+                # cropped face image
                 cropImg = npImg[bb.top():bb.bottom(),
                               bb.left():bb.right()]
                 _, jpgImg = cv2.imencode(
@@ -265,7 +270,7 @@ class Facenet():
                 laplacianImg = cv2.Laplacian(cropGrayImg, cv2.CV_64F)
                 focus_measure = laplacianImg.var()
 
-                # rule-3: check blurry face
+                # rule-3: drop blurry face
                 print("Focus Measure: {}".format(focus_measure))
                 blur = focus_measure < args.focusMeasure
 
@@ -292,7 +297,7 @@ class Facenet():
                     callback(robotId, videoId, keyframe, foundFace)
                     return 
 
-                # rule-5: check side face
+                # rule-5: FOUND (detect) >>> side face
                 headPose = self.hpp(grayImg, bb)
                 headPoseImage, p1, p2 = hp.pose_estimate(grayImg, headPose)
                 headPoseLength = cv2.norm(
@@ -311,8 +316,8 @@ class Facenet():
                                     (ex+ew, ey+eh), (0, 255, 0), 2)
                     cv2.putText(cropGrayImg, 'Side' if sideFace else 'Front',
                                 (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255))
-                    cv2.imshow('Head Pose', cropGrayImg)
-                    cv2.waitKey(1)
+                    # cv2.imshow('Head Pose', cropGrayImg)
+                    # cv2.waitKey(1)
                     if args.saveImg:
                         cv2.imwrite(
                             "images/side_"+datetime.now().strftime("%Y-%m-%d_%H:%M:%S.%f")+".jpg", cropGrayImg)
@@ -363,7 +368,7 @@ class Facenet():
 
                 # assign label only when embedding is successfully computed
                 foundFace.label = label
-                callback(robotId, videoId, keyframe, foundFace)
+                callback(robotId, videoId, keyframe, foundFace, purpose)
 
             print("Finished processing frame {} for {} seconds.".format(
                 keyframe, time.time() - start))
