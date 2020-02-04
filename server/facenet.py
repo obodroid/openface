@@ -334,10 +334,7 @@ class Facenet():
                 self.logProcessTime(
                     "6_feed_network", 'Neural network forward pass', robotId, videoId, keyframe)
 
-                if purpose:
-                    callback(robotId, videoId, keyframe, foundFace, purpose =True)
-                else:
-                    callback(robotId, videoId, keyframe, foundFace)
+                callback(robotId, videoId, keyframe, foundFace, purpose)
 
             print("Finished processing frame {} for {} seconds.".format(
                 keyframe, time.time() - start))

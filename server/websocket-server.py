@@ -545,9 +545,9 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
         return peopleId, label, confidence
 
-    def foundFaceCallback(self, robotId, videoId, keyframe, foundFace, purpose = False):
+    def foundFaceCallback(self, robotId, videoId, keyframe, foundFace, purpose = None):
         print("foundFaceCallback : {}".format(keyframe))
-
+     
         if purpose:
             if purpose == 'search':
                 search = True
@@ -593,7 +593,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     print("Unconfident face classification")
 
             foundFace.cluster = faceId
-            self.foundUser(robotId, videoId, keyframe, foundFace,purpose)
+            self.foundUser(robotId, videoId, keyframe, foundFace, purpose)
 
         benchmark.updateAvg("processFrame")
         self.logProcessTime(
