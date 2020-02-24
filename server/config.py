@@ -28,7 +28,7 @@ class Config:
     
     recentFaceTimeout=10
     minFaceResolution=100
-    loosenFactor=1.0
+    loosenFactor=0.75
     focusMeasure=20
     sideFaceThreshold=15
     confidenceThreshold=0.2
@@ -40,7 +40,7 @@ class Config:
     # tls_key = os.path.join(fileDir, 'tls', 'server.key')
     
     # For connect with Facepp
-    enableFacepp = True
+    enableFacepp = False
     keyFacepp = "eoYSb8GL-d54k3_C37K7XfHxLcLfNoug"
     secretFacepp = "x6eLXTXf1ORSXlJeh9Zpcf9t5-HCadn-"
       

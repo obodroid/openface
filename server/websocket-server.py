@@ -439,7 +439,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             return timeDiff.total_seconds() < args.recentFaceTimeout
 
         self.recentFaces = filter(isValid, self.recentFaces)
-
+            
         for recentFace in self.recentFaces:
             d = rep - recentFace['rep']
             drep = np.dot(d, d)
@@ -462,7 +462,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
         return recentFaceId
 
-    def foundUser(self, robotId, videoId, keyframe, face):
+    def foundUser(self, robotId, videoId, keyframe, face, purpose=None):
         print("found people id: {}".format(face.identity))
 
         msg = {
@@ -474,6 +474,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             "content": face.content,
             "rep": face.rep.tolist() if face.rep is not None else None,
             "bbox": face.bbox,
+            "purpose":purpose,
             "time": datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'),
             "ageFacepp": face.facepp.age, 
             "genderFacepp": face.facepp.gender, 
@@ -556,7 +557,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
         return peopleId, label, confidence
 
-    def foundFaceCallback(self, robotId, videoId, keyframe, foundFace):
+    def foundFaceCallback(self, robotId, videoId, keyframe, foundFace, purpose = None):
         print("foundFaceCallback : {}".format(keyframe))
 
         if foundFace.rep is None:
@@ -564,43 +565,43 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             self.foundUser(robotId, videoId, keyframe, foundFace)
             return
 
-        # check recent face (if has face rep)
+        # check recent face
         recentFaceId = self.getRecentFace(foundFace.rep)
-        if recentFaceId is None or self.processRecentFace:
-            if recentFaceId is not None:
-                faceId = recentFaceId
+        
+        if recentFaceId is not None:
+            faceId = recentFaceId
+        else:
+            faceId = self.faceId
+            self.faceId += 1
+
+        if self.enableClassifier:
+            peopleId, label, confidence = self.classifyFace(foundFace.rep)
+
+            self.logProcessTime(
+                "7_predict_face", 'Face Prediction', robotId, videoId, keyframe)
+
+            if confidence and confidence > args.confidenceThreshold:
+                if peopleId in self.recentPeople:
+                    timeDiff = datetime.now() - \
+                        self.recentPeople[peopleId]['time']
+
+                    if timeDiff.total_seconds() > args.recentFaceTimeout:
+                        del self.recentPeople[peopleId]
+                    else:
+                        faceId = self.recentPeople[peopleId]['faceId']
+
+                self.recentPeople[peopleId] = {
+                    'faceId': faceId,
+                    'time': datetime.now()
+                }
+
+                foundFace.identity = peopleId
+                foundFace.label = label
             else:
-                faceId = self.faceId
-                self.faceId += 1
+                print("Unconfident face classification")
 
-            if self.enableClassifier:
-                peopleId, label, confidence = self.classifyFace(foundFace.rep)
-
-                self.logProcessTime(
-                    "7_predict_face", 'Face Prediction', robotId, videoId, keyframe)
-
-                if confidence and confidence > args.confidenceThreshold:
-                    if peopleId in self.recentPeople:
-                        timeDiff = datetime.now() - \
-                            self.recentPeople[peopleId]['time']
-
-                        if timeDiff.total_seconds() > args.recentFaceTimeout:
-                            del self.recentPeople[peopleId]
-                        else:
-                            faceId = self.recentPeople[peopleId]['faceId']
-
-                    self.recentPeople[peopleId] = {
-                        'faceId': faceId,
-                        'time': datetime.now()
-                    }
-
-                    foundFace.identity = peopleId
-                    foundFace.label = label
-                else:
-                    print("Unconfident face classification")
-
-            foundFace.cluster = faceId
-            self.foundUser(robotId, videoId, keyframe, foundFace)
+        foundFace.cluster = faceId
+        self.foundUser(robotId, videoId, keyframe, foundFace, purpose)
 
         benchmark.updateAvg("processFrame")
         self.logProcessTime(
