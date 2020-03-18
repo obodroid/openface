@@ -286,13 +286,13 @@ class Facenet():
 
                 if blur and not skipQualityCheck:
                     print("found blurry face")
-                    foundFace.faceComment = [2,3]
+                    foundFace.faceComment = ['e',3]
                     callback(robotId, videoId, keyframe, foundFace)
                     continue
 
                 # rule-4: check low resolution face
                 if bb.width() < args.minFaceResolution or bb.height() < args.minFaceResolution:
-                    foundFace.faceComment = [2,4]
+                    foundFace.faceComment = ['e',4]
                     print("found low resolution face")
                     callback(robotId, videoId, keyframe, foundFace)
                     return 
