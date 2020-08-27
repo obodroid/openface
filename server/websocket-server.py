@@ -474,7 +474,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             "content": face.content,
             "rep": face.rep.tolist() if face.rep is not None else None,
             "bbox": face.bbox,
-            "purpose":purpose,
+            "purpose": purpose,
             "time": datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'),
             "ageFacepp": face.facepp.age, 
             "genderFacepp": face.facepp.gender, 
@@ -497,7 +497,9 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             msg["predict_people_id"] = face.identity
         elif face.label:
             msg["label"] = face.label
-
+        elif face.registerName:
+            msg['label'] = face.registerName
+            
         self.pushMessage(msg)
 
     def classifyFace(self, rep):
@@ -562,7 +564,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
         if foundFace.rep is None:
             # found face but cannot recognize user
-            self.foundUser(robotId, videoId, keyframe, foundFace)
+            self.foundUser(robotId, videoId, keyframe, foundFace,purpose)
             return
 
         # check recent face

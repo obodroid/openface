@@ -179,6 +179,11 @@ class Facenet():
             else:
                 purpose = None
 
+            if msg.has_key("registerName"):
+                registerName = msg['registerName']
+            else:
+                registerName = None
+
             self.logProcessTime(
                 "0_start", "Start processing frame {}".format(frameSerial), robotId, videoId, keyframe)
 
@@ -263,6 +268,9 @@ class Facenet():
 
                 foundFace = Face(None, phash=phash, content=content, bbox=bbox)
 
+                if registerName:
+                    foundFace.registerName = registerName
+
                 # change to gray image to check blurry and headpose
                 grayImg = cv2.cvtColor(npImg, cv2.COLOR_RGB2GRAY)
                 cropGrayImg = cv2.cvtColor(cropImg, cv2.COLOR_RGB2GRAY)
@@ -324,7 +332,7 @@ class Facenet():
                 
                 if sideFace and not skipQualityCheck:
                     print("found non-frontal face by head pose estimator")
-                    callback(robotId, videoId, keyframe, foundFace)
+                    callback(robotId, videoId, keyframe, foundFace, purpose)
                     return
 
                 # call face++ api
@@ -343,12 +351,12 @@ class Facenet():
                     print("sideFace by Face++: {}".format(sideFace))
                 elif args.enableFacepp and not skipQualityCheck:
                     print("found face without head pose")
-                    callback(robotId, videoId, keyframe, foundFace)
+                    callback(robotId, videoId, keyframe, foundFace,purpose)
                     continue
 
                 if sideFace and not skipQualityCheck:
                     print("found non-frontal face by Face++")
-                    callback(robotId, videoId, keyframe, foundFace)
+                    callback(robotId, videoId, keyframe, foundFace,purpose)
                     return
 
                 # get face descriptor or representations from face recogntion model
