@@ -499,7 +499,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             msg["label"] = face.label
         elif face.registerName:
             msg['label'] = face.registerName
-            
+            msg['registerName'] = face.registerName
+
         self.pushMessage(msg)
 
     def classifyFace(self, rep):
