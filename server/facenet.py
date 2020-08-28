@@ -270,6 +270,8 @@ class Facenet():
 
                 if registerName:
                     foundFace.registerName = registerName
+                else:
+                    foundFace.registerName = None
 
                 # change to gray image to check blurry and headpose
                 grayImg = cv2.cvtColor(npImg, cv2.COLOR_RGB2GRAY)
