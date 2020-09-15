@@ -41,7 +41,7 @@ class Facepp():
         self.facequality = None
         self.headpose = None
         self.indexFace = None
-        self.comment = [2,5]
+        self.comment = None
 
 
     def findMaxValueInDict(self, myDict):
@@ -126,29 +126,33 @@ class Facepp():
         self.indexFace = self.mapIndexHeadPoseDict[indexFace]
     
     def faceSuggestion(self):
+	    # index = 1 (top-left), index = 2 (top-mid), index = 3 (top-right)
+		# index = 4 (mid-left), index = 5 (mid-mid), index = 6 (mid-right)
+		# index = 7 (bottom-left), index = 8 (bottom-mid), index = 9 (bottom-right)
+
         if self.indexFace == None:
             print("no indexFace")
         else:
             numFace = self.mapIndexHeadPoseDict.keys()[self.mapIndexHeadPoseDict.values().index(self.indexFace)] 
             
         if numFace == '1':
-            self.comment = [-1,1]
+            self.comment = ['L','D']
         elif numFace == '2':
-            self.comment = [0,1]
+            self.comment = ['M','D']
         elif numFace == '3':
-            self.comment = [1,1]
+            self.comment = ['R','D']
         elif numFace == '4':
-            self.comment = [-1,0]
+            self.comment = ['L','M']
         elif numFace == '6':
-            self.comment = [1,0]
+            self.comment = ['R','M']
         elif numFace == '7':
-            self.comment = [-1,-1]
+            self.comment = ['L','U']
         elif numFace == '8':
-            self.comment = [0,-1]
+            self.comment = ['M','U']
         elif numFace == '9':
-            self.comment = [1,-1]
+            self.comment = ['R','U']
         elif numFace == '5':
-            self.comment = [0,0]            
+            self.comment = ['M','M']            
 
 
 

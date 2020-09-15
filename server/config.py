@@ -41,8 +41,8 @@ class Config:
     
     # For connect with Facepp
     enableFacepp = True
-    keyFacepp = "eoYSb8GL-d54k3_C37K7XfHxLcLfNoug"
-    secretFacepp = "x6eLXTXf1ORSXlJeh9Zpcf9t5-HCadn-"
+    keyFacepp = "oFz5whP3a5aBmm1mLS49bvRFuDzz-Wkp"
+    secretFacepp = "6bps5cW6JqHjlFgHS3cUnRX3YAcnW8Rv"
       
 class DevConfig(Config):
     DEBUG = True
