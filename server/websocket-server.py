@@ -237,6 +237,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
 
     def onClose(self, wasClean, code, reason):
         print("WebSocket connection closed: {0}".format(reason))
+        facenet.deinitfacenetWorkers()
 
     def loadState(self, jsImages, training, jsPeople):
         self.training = training
@@ -642,4 +643,9 @@ def main(reactor):
 
 
 if __name__ == '__main__':
+    mp.set_start_method('spawn', force=True)
+    mp.log_to_stderr()
+    logger = mp.get_logger()
+    logger.setLevel(logging.INFO)
+    q = Queue()
     task.react(main)

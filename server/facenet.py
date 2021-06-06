@@ -45,6 +45,7 @@ from face import Face
 from facepp import Facepp
 import headPoseEstimator as hp
 
+from multiprocessing import Process
 import Queue
 import threading
 import urllib
@@ -97,8 +98,9 @@ class MidpointNormalize(Normalize):
         x, y = [self.vmin, self.midpoint, self.vmax], [0, 0.5, 1]
         return np.ma.masked_array(np.interp(value, x, y))
 
-class Facenet():
+class Facenet(Process):
     def __init__(self, workerIndex):
+        Process.__init__(self)
         self.workerIndex = workerIndex
         self.detectQueue = Queue.Queue(maxsize=10)
         self.detectWorker = threading.Thread(target=self.consume)
@@ -385,11 +387,20 @@ print("facenet numWorkers : {}".format(numWorkers))
 
 loadIndex = 0
 
-for i in range(numWorkers):
-    facenetWorkers.append(Facenet(i))
 
 def putLoad(msg, callback):
     global loadIndex
+    for i in range(numWorkers):
+        facenetWorkers.append(Facenet(i))
     print("putLoad loadIndex = {}".format(loadIndex))
+    facenetWorkers.start()
     facenetWorkers[loadIndex % numWorkers].qput(msg, callback)
     loadIndex = loadIndex + 1
+
+def deinitFacenetWorkers():
+    for worker in facenetWorkers:
+        worker.join()
+        worker.terminate()
+        print("facenet worker {} stopped".format(worker.index))
+        worker.isStop.value = True
+    facenetWorkers.clear()
