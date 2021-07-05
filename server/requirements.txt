@@ -1,6 +1,6 @@
 autobahn[accelerate] == 18.12.1
 imagehash == 1.0
-twisted == 18.9.0
+twisted
 scipy >= 0.13.3, < 0.17
 scikit-learn >= 0.18, < 0.20
 protobuf >= 2.5, < 2.7
