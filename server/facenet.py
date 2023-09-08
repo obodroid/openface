@@ -196,6 +196,11 @@ class Facenet():
 
             npImg = np.asarray(imgPIL)
 
+            height, width, channels = npImg.shape
+            if height < 20 or width < 20:
+                print("too small image: height {}, width {}".format(height, width))
+                return
+
             # save input image if you want to compare later
             if args.saveImg:
                 imgPIL.save(os.path.join(args.imgPath, 'input',
@@ -376,7 +381,8 @@ class Facenet():
             print(traceback.format_exc())
 
     def logProcessTime(self, step, logMessage, robotId, videoId, keyframe):
-        pass
+        print("[{}] video {}-{}@keyframe {}: {}".format(step, robotId, videoId, keyframe, logMessage))
+        sys.stdout.flush()
 
 numWorkers = args.NUM_WORKERS
 numGpus = args.NUM_GPUS

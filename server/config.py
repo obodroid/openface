@@ -40,7 +40,7 @@ class Config:
     # tls_key = os.path.join(fileDir, 'tls', 'server.key')
     
     # For connect with Facepp
-    enableFacepp = True
+    enableFacepp = False
     keyFacepp = "eoYSb8GL-d54k3_C37K7XfHxLcLfNoug"
     secretFacepp = "x6eLXTXf1ORSXlJeh9Zpcf9t5-HCadn-"
       
@@ -51,12 +51,12 @@ class DevConfig(Config):
     
 class TestConfig(Config):
     DEBUG = True
-    TESTING = True
+    verbose = True
     saveImg = True
 
 class ProdConfig(Config):
     DEBUG = False
-    TESTING = False
+    verbose = False
     saveImg = False
 
 def loadConfig(env=None):
