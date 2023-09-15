@@ -199,6 +199,7 @@ class Facenet():
             height, width, channels = npImg.shape
             if height < 20 or width < 20:
                 print("too small image: height {}, width {}".format(height, width))
+                sys.stdout.flush()
                 return
 
             # save input image if you want to compare later
@@ -212,7 +213,7 @@ class Facenet():
             if args.facePredictor:
                 benchmark.start(
                     "cnn_face_detector_{}".format(frameSerial))
-                bbs = self.cnn_face_detector(npImg, 0)
+                bbs = self.cnn_face_detector(npImg, 1)
                 benchmark.update(
                     "cnn_face_detector_{}".format(frameSerial))
                 tag, elasped, rate = benchmark.end(
