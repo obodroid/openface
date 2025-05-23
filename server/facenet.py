@@ -131,8 +131,9 @@ class Facenet():
         # TODO need flag to stop benchmark
         while True:
             if not self.detectQueue.empty():
+                print("facenetWorker-{} retrieve data from queue".format(self.workerIndex))
                 msg, callback = self.detectQueue.get()
-                print("facenetWorker-{}  consume : {}".format(self.workerIndex, msg['keyframe']))
+                print("facenetWorker-{} consume : {}".format(self.workerIndex, msg['keyframe']))
                 self.processFrame(msg, callback)
             time.sleep(0.001)
         

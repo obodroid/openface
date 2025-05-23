@@ -2,7 +2,7 @@
 import os
 import sys
 
-environment = "dev"
+environment = "test"
 
 fileDir = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(os.path.join(fileDir, ".."))
